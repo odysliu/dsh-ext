@@ -26,6 +26,7 @@ constexpr uint16_t kDanger = rgb(255, 96, 120);
 
 constexpr int kFishX = 83;
 constexpr int kFishY = 36;
+constexpr uint16_t kRing = rgb(255, 64, 72);
 
 constexpr int kButtonY = 332;
 constexpr int kButtonH = 56;
@@ -129,7 +130,17 @@ void UI::animate() {
   const uint32_t now = millis();
   if (now - lastFrame_ < STOPWATCH_FRAME_MS) return;
   lastFrame_ = now;
+  character_.tick(now);
   character_.push(kFishX, kFishY);
+  if (state_ == kAlert) {
+    // breathing red ring: the whole point is being impossible to miss
+    const int offset = static_cast<int>((sinf(now / 210.0f) + 1.0f) * 3.0f);
+    drawAttentionRing(216 + offset, 9);
+  }
+}
+
+void UI::drawAttentionRing(int radius, int thickness) {
+  M5.Display.drawArc(kCx, kCx, radius, radius + thickness, 0, 360, kRing);
 }
 
 void UI::render() {
@@ -235,6 +246,8 @@ void UI::renderPrompt() {
     text::drawCentered(M5.Display, kCx, y, prompt_.lines[i], kText, kBg);
     y += text::kLineHeight;
   }
+
+  drawAttentionRing(222, 6);
 
   drawButton(kDenyX, kButtonY, kButtonW, kButtonH, denyArmed_ ? "再点一次" : "拒绝",
              denyArmed_ ? kDanger : kPanel, denyArmed_ ? kBg : kDanger, !denyArmed_);

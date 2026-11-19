@@ -34,24 +34,33 @@ def centered(d, y, text, color, size):
     d.text(((W - d.textlength(text, font=f)) / 2, y), text, font=f, fill=color)
 
 
-def sprite(name, size=300):
-    img = Image.open(ART / f"{name}.png").convert("RGBA")
+def sprite(state, frame=0, size=300):
+    path = ART / f"{state}-{frame}.png"
+    if not path.exists():
+        path = ART / f"{state}.png"
+    img = Image.open(path).convert("RGBA")
     return img.resize((size, size), Image.LANCZOS)
+
+
+def ring(d, radius=222, thickness=6, color=(255, 64, 72)):
+    d.ellipse([233 - radius, 233 - radius, 233 + radius, 233 + radius], outline=color, width=thickness)
 
 
 def card(state):
     img = Image.new("RGB", (W, W), BG)
     if state != "prompt":
-        art = sprite({"idle": "idle", "alert": "alert", "happy": "happy", "sad": "sad"}[state])
+        art = sprite(state)
         img.paste(art, (FISH_X, FISH_Y), art)
     d = ImageDraw.Draw(img)
     if state == "idle":
         centered(d, 346, "已连接", MUTED, 28)
         centered(d, 412, "88%  -52dBm", MUTED, 18)
     elif state == "alert":
+        ring(d, 222, 9)
         centered(d, 346, "有确认请求", TEXT, 28)
         centered(d, 382, "点一下屏幕", ACCENT, 28)
     elif state == "prompt":
+        ring(d, 222, 6)
         centered(d, 40, "需要确认", TEXT, 28)
         centered(d, 78, "bash", ACCENT, 28)
         y = 112

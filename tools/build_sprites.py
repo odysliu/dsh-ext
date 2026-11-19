@@ -32,12 +32,17 @@ BPP = 8
 COLORS = 255  # index 0 stays transparent
 
 
-def find_source(state: str) -> pathlib.Path | None:
-    for pattern in (f"{state}.png", f"{state}.PNG", f"*{state}*.png", f"*{state}*.PNG"):
+def find_sources(state: str) -> list[pathlib.Path]:
+    """All frames for one state: `idle.png`, or `idle-0.png`, `idle-1.png`, ..."""
+    numbered = sorted(SRC_DIR.glob(f"{state}-*.png")) + sorted(SRC_DIR.glob(f"{state}-*.PNG"))
+    if numbered:
+        return numbered
+    for pattern in (f"{state}.png", f"{state}.PNG"):
         hits = sorted(SRC_DIR.glob(pattern))
         if hits:
-            return hits[0]
-    return None
+            return [hits[0]]
+    hits = sorted(SRC_DIR.glob(f"*{state}*.png"))
+    return [hits[0]] if hits else []
 
 
 def drop_background(img: Image.Image) -> Image.Image:
@@ -64,19 +69,33 @@ def drop_background(img: Image.Image) -> Image.Image:
     return img
 
 
-def fit_square(img: Image.Image, size: int = SIZE) -> Image.Image:
-    """Crop to the artwork and fit it inside a square with a small margin."""
-    bbox = img.getchannel("A").getbbox()
-    if bbox is None:
-        raise SystemExit("artwork is fully transparent")
-    art = img.crop(bbox)
-    box = int(size * (1 - 2 * MARGIN))
-    scale = min(box / art.width, box / art.height)
-    art = art.resize((max(1, round(art.width * scale)), max(1, round(art.height * scale))), Image.LANCZOS)
+def fit_common(images: list[Image.Image], size: int = SIZE) -> list[Image.Image]:
+    """Crop every frame of a state with one shared box so they stay registered.
 
-    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    canvas.alpha_composite(art, ((size - art.width) // 2, (size - art.height) // 2))
-    return canvas
+    Per-frame cropping makes the character twitch between frames, because each
+    frame's alpha bbox differs by a few pixels.
+    """
+    boxes = [img.getchannel("A").getbbox() for img in images]
+    if any(box is None for box in boxes):
+        raise SystemExit("artwork is fully transparent")
+    left = min(box[0] for box in boxes)
+    top = min(box[1] for box in boxes)
+    right = max(box[2] for box in boxes)
+    bottom = max(box[3] for box in boxes)
+    width, height = right - left, bottom - top
+
+    box = int(size * (1 - 2 * MARGIN))
+    scale = min(box / width, box / height)
+    target = (max(1, round(width * scale)), max(1, round(height * scale)))
+    offset = ((size - target[0]) // 2, (size - target[1]) // 2)
+
+    out = []
+    for img in images:
+        art = img.crop((left, top, right, bottom)).resize(target, Image.LANCZOS)
+        canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        canvas.alpha_composite(art, offset)
+        out.append(canvas)
+    return out
 
 
 def quantize(img: Image.Image) -> tuple[Image.Image, list[tuple[int, int, int]]]:
@@ -97,6 +116,30 @@ def quantize(img: Image.Image) -> tuple[Image.Image, list[tuple[int, int, int]]]
     indexed = Image.frombytes("P", img.size, bytes(data))
     indexed.putpalette([0, 0, 0] + palette + [0] * (768 - 3 - len(palette)))
     return indexed, colors
+
+
+def quantize_palette(img: Image.Image) -> list[int]:
+    """The RGB palette the quantiser would pick for this frame."""
+    rgb = Image.new("RGB", img.size, (9, 11, 22))
+    rgb.paste(img, (0, 0), img)
+    return rgb.quantize(colors=COLORS, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).getpalette()[
+        : COLORS * 3
+    ]
+
+
+def remap(img: Image.Image, palette_img: Image.Image) -> Image.Image:
+    """Map a frame onto an existing palette and keep alpha as index 0."""
+    rgb = Image.new("RGB", img.size, (9, 11, 22))
+    rgb.paste(img, (0, 0), img)
+    quant = rgb.quantize(palette=palette_img, dither=Image.Dither.NONE)
+    indices = quant.tobytes()
+    alpha = img.getchannel("A").tobytes()
+    data = bytearray(len(indices))
+    for i, value in enumerate(indices):
+        data[i] = (value + 1) if alpha[i] >= 128 else 0
+    indexed = Image.frombytes("P", img.size, bytes(data))
+    indexed.putpalette(palette_img.getpalette())
+    return indexed
 
 
 def rgb565(color: tuple[int, int, int]) -> int:
@@ -127,22 +170,30 @@ def main() -> None:
     parser.add_argument("--preview", default=str(PREVIEW))
     args = parser.parse_args()
 
-    found = {state: find_source(state) for state in STATES}
-    if found["idle"] is None:
+    found = {state: find_sources(state) for state in STATES}
+    if not found["idle"]:
         print(f"没有找到角色图。把 PNG 放进 {SRC_DIR.relative_to(ROOT)}/（至少 idle.png）再运行。")
         print(f"当前目录内容：{sorted(p.name for p in SRC_DIR.glob('*'))}")
         sys.exit(0)
 
-    sprites: dict[str, tuple[Image.Image, list]] = {}
+    sprites: dict[str, tuple[list[Image.Image], list]] = {}
     for state in STATES:
-        path = found[state] or found["idle"]
-        print(f"{state:6s} <- {path.name}")
-        img = Image.open(path)
-        img.thumbnail((1200, 1200), Image.LANCZOS)
-        img = drop_background(img)
-        fitted = fit_square(img)
-        indexed, colors = quantize(fitted)
-        sprites[state] = (indexed, colors)
+        paths = found[state] or found["idle"]
+        print(f"{state:6s} <- {len(paths)} frame(s): {', '.join(p.name for p in paths)}")
+        raw = []
+        for path in paths:
+            img = Image.open(path)
+            img.thumbnail((1200, 1200), Image.LANCZOS)
+            raw.append(drop_background(img))
+        fitted_frames = fit_common(raw)
+        # one palette for the whole state, otherwise colours flicker between frames
+        indexed, colors = quantize(fitted_frames[0])
+        palette_img = Image.new("P", (1, 1))
+        palette_img.putpalette([0, 0, 0] + quantize_palette(fitted_frames[0]))
+        frames = [indexed]
+        for fitted in fitted_frames[1:]:
+            frames.append(remap(fitted, palette_img))
+        sprites[state] = (frames, colors)
 
     OUT_HEADER.parent.mkdir(parents=True, exist_ok=True)
     with OUT_HEADER.open("w", encoding="utf-8") as handle:
@@ -154,30 +205,37 @@ def main() -> None:
         handle.write(f"#define CHAR_PALETTE_SIZE {COLORS + 1}\n")
         handle.write(f"#define CHAR_BYTES (CHAR_W * CHAR_H * {BPP} / 8)\n\n")
         for state in STATES:
-            _, colors = sprites[state]
-            handle.write(f"static const uint16_t CHAR_{state.upper()}_PAL[CHAR_PALETTE_SIZE] = {{\n  0x0000,\n")
+            frames, colors = sprites[state]
+            name = state.upper()
+            handle.write(f"#define CHAR_{name}_COUNT {len(frames)}\n")
+            handle.write(f"static const uint16_t CHAR_{name}_PAL[CHAR_PALETTE_SIZE] = {{\n  0x0000,\n")
             handle.write("".join(f"  0x{rgb565(c):04X},\n" for c in colors))
             handle.write("};\n\n")
-            handle.write(f"static const uint8_t CHAR_{state.upper()}[CHAR_BYTES] = {{\n")
-            packed = pack(sprites[state][0])
-            for offset in range(0, len(packed), 24):
-                handle.write("  " + ",".join(str(b) for b in packed[offset : offset + 24]) + ",\n")
-            handle.write("};\n\n")
+            for index, frame in enumerate(frames):
+                handle.write(f"static const uint8_t CHAR_{name}_{index}[CHAR_BYTES] = {{\n")
+                packed = pack(frame)
+                for offset in range(0, len(packed), 24):
+                    handle.write("  " + ",".join(str(b) for b in packed[offset : offset + 24]) + ",\n")
+                handle.write("};\n\n")
+            pointers = ", ".join(f"CHAR_{name}_{i}" for i in range(len(frames)))
+            handle.write(f"static const uint8_t* const CHAR_{name}_FRAMES[CHAR_{name}_COUNT] = {{{pointers}}};\n\n")
 
-    preview = Image.new("RGB", (SIZE * 4, SIZE), (9, 11, 22))
-    for index, state in enumerate(STATES):
-        indexed, colors = sprites[state]
-        rgba = Image.new("RGBA", indexed.size, (0, 0, 0, 0))
-        src = indexed.load()
-        dst = rgba.load()
-        for y in range(SIZE):
-            for x in range(SIZE):
-                value = src[x, y]
-                if value == 0:
-                    continue
-                r, g, b = colors[value - 1] if value - 1 < len(colors) else (255, 0, 255)
-                dst[x, y] = (r, g, b, 255)
-        preview.paste(rgba, (index * SIZE, 0), rgba)
+    per_state = max(len(sprites[state][0]) for state in STATES)
+    preview = Image.new("RGB", (SIZE * per_state, SIZE * len(STATES)), (9, 11, 22))
+    for row, state in enumerate(STATES):
+        frames, colors = sprites[state]
+        for column, indexed in enumerate(frames):
+            rgba = Image.new("RGBA", indexed.size, (0, 0, 0, 0))
+            src = indexed.load()
+            dst = rgba.load()
+            for y in range(SIZE):
+                for x in range(SIZE):
+                    value = src[x, y]
+                    if value == 0:
+                        continue
+                    r, g, b = colors[value - 1] if value - 1 < len(colors) else (255, 0, 255)
+                    dst[x, y] = (r, g, b, 255)
+            preview.paste(rgba, (column * SIZE, row * SIZE), rgba)
     pathlib.Path(args.preview).parent.mkdir(parents=True, exist_ok=True)
     preview.save(args.preview)
 

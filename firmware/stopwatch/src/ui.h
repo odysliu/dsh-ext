@@ -41,6 +41,7 @@ class UI : public LinkListener {
   void renderNotice();
   void drawStatusLine();
   void drawButton(int x, int y, int w, int h, const char* label, uint16_t fill, uint16_t textColor, bool outline);
+  void drawAttentionRing(int radius, int thickness);
   void handleTap(int x, int y);
   void setState(State next);
   void animate();

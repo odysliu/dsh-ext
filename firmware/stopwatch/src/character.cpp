@@ -4,22 +4,24 @@
 
 namespace {
 
-/** Palette + pixels for one mood. */
-struct Frame {
+/** One mood's palette, frames and playback speed. */
+struct FrameSet {
   const uint16_t* palette;
-  const uint8_t* pixels;
+  const uint8_t* const* frames;
+  int count;
+  uint32_t frameMs;
 };
 
-Frame frameFor(Character::Mood mood) {
+FrameSet setFor(Character::Mood mood) {
   switch (mood) {
     case Character::kAlert:
-      return {CHAR_ALERT_PAL, CHAR_ALERT};
+      return {CHAR_ALERT_PAL, CHAR_ALERT_FRAMES, CHAR_ALERT_COUNT, 180};
     case Character::kHappy:
-      return {CHAR_HAPPY_PAL, CHAR_HAPPY};
+      return {CHAR_HAPPY_PAL, CHAR_HAPPY_FRAMES, CHAR_HAPPY_COUNT, 150};
     case Character::kSad:
-      return {CHAR_SAD_PAL, CHAR_SAD};
+      return {CHAR_SAD_PAL, CHAR_SAD_FRAMES, CHAR_SAD_COUNT, 0};
     default:
-      return {CHAR_IDLE_PAL, CHAR_IDLE};
+      return {CHAR_IDLE_PAL, CHAR_IDLE_FRAMES, CHAR_IDLE_COUNT, 320};
   }
 }
 
@@ -27,31 +29,59 @@ Frame frameFor(Character::Mood mood) {
 
 void Character::begin(uint16_t background) {
   background_ = background;
-  canvas_.setPsram(true);
-  canvas_.createSprite(CHAR_W, CHAR_H);
+  for (int i = 0; i < kMaxFrames; i++) {
+    frames_[i].setPsram(true);
+    frames_[i].createSprite(CHAR_W, CHAR_H);
+  }
   ready_ = true;
+  count_ = 0;
   setMood(kIdle);
 }
 
 int Character::width() { return CHAR_W; }
 
 void Character::setMood(Mood mood) {
-  if (!ready_ || mood == mood_) return;
+  if (!ready_) return;
+  if (mood == mood_ && count_ > 0) return;
   mood_ = mood;
-  const Frame frame = frameFor(mood);
+  const FrameSet set = setFor(mood);
+  count_ = set.count > kMaxFrames ? kMaxFrames : set.count;
+  frameMs_ = set.frameMs;
+  index_ = 0;
+  direction_ = 1;
+  lastFrame_ = millis();
+
   uint16_t row[CHAR_W];
-  canvas_.fillScreen(background_);
-  for (int y = 0; y < CHAR_H; y++) {
-    const uint8_t* line = frame.pixels + static_cast<size_t>(y) * CHAR_W;
-    for (int x = 0; x < CHAR_W; x++) {
-      const uint8_t index = line[x];
-      row[x] = index == 0 ? background_ : frame.palette[index];
+  for (int frame = 0; frame < count_; frame++) {
+    M5Canvas& canvas = frames_[frame];
+    canvas.fillScreen(background_);
+    const uint8_t* pixels = set.frames[frame];
+    for (int y = 0; y < CHAR_H; y++) {
+      const uint8_t* line = pixels + static_cast<size_t>(y) * CHAR_W;
+      for (int x = 0; x < CHAR_W; x++) {
+        const uint8_t index = line[x];
+        row[x] = index == 0 ? background_ : set.palette[index];
+      }
+      canvas.pushImage(0, y, CHAR_W, 1, row);
     }
-    canvas_.pushImage(0, y, CHAR_W, 1, row);
+  }
+}
+
+void Character::tick(uint32_t now) {
+  if (!ready_ || count_ < 2 || frameMs_ == 0) return;
+  if (now - lastFrame_ < frameMs_) return;
+  lastFrame_ = now;
+  index_ += direction_;
+  if (index_ >= count_) {
+    index_ = count_ - 2;
+    direction_ = -1;
+  } else if (index_ < 0) {
+    index_ = 1;
+    direction_ = 1;
   }
 }
 
 void Character::push(int x, int y) {
-  if (!ready_) return;
-  canvas_.pushSprite(x, y);
+  if (!ready_ || count_ == 0) return;
+  frames_[index_].pushSprite(x, y);
 }

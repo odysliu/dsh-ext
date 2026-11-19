@@ -25,7 +25,9 @@ const PAGE = 'http://127.0.0.1:8765/tools/bake-live2d/bake.html'
 const args = parseArgs(process.argv.slice(2))
 const size = Number(args.size ?? 1024)
 const outDir = resolve(args.out ?? join(ROOT, 'tools', '.cache', 'live2d'))
-const states = (args.states ?? 'idle:cry,excited,sad,question').split('|')
+const states = (args.states ?? 'idle|问号|开心兴奋|悲伤').split('|')
+const frames = Number(args.frames ?? 1)
+const interval = Number(args.interval ?? 250)
 const zoom = String(args.zoom ?? '0.92')
 const offsetY = String(args.oy ?? '0')
 
@@ -144,15 +146,21 @@ async function bakeState(state) {
     return false
   }
 
-  const shot = await send('Page.captureScreenshot', {
-    format: 'png',
-    fromSurface: true,
-    captureBeyondViewport: false,
-    omitBackground: true,
-  })
-  const path = join(outDir, `${state}.png`)
-  writeFileSync(path, Buffer.from(shot.data, 'base64'))
-  console.log(`  ✓ ${state} -> ${path}`)
+  // One page session yields a short frame strip: the Live2D idle motion keeps
+  // running between captures, so the frames differ by breath/blink phase.
+  for (let index = 0; index < frames; index += 1) {
+    if (index > 0) await sleep(interval)
+    const shot = await send('Page.captureScreenshot', {
+      format: 'png',
+      fromSurface: true,
+      captureBeyondViewport: false,
+      omitBackground: true,
+    })
+    const name = frames === 1 ? `${state}.png` : `${state}-${index}.png`
+    const path = join(outDir, name)
+    writeFileSync(path, Buffer.from(shot.data, 'base64'))
+    console.log(`  ✓ ${name}`)
+  }
   ws.close()
   await fetch(`http://127.0.0.1:${PORT}/json/close/${id}`)
   return true

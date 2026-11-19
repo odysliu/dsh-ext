@@ -12,7 +12,7 @@
 | 局域网发现 | `tools/fake-device.mjs` 广播发现 | 收到 `{"t":"host"}` 并连上 10.184.47.60:47777 |
 | 握手 / 心跳 | 假设备日志 | `hello → welcome`，心跳正常 |
 | 真实 approval 链路 | 触发沙箱提权（写工作区外文件） | 插件收到请求并下发到设备；当时判定"内容过长"而回落 Web UI（已按真实 reason 修正阈值） |
-| 固件编译 | `arduino-cli compile`（esp32 3.3.4 + M5Unified/M5GFX 0.3.0） | ✅ 通过，0 warning：`Sketch uses 2,080,471 bytes (66%) of 3 MB`，RAM 17% |
+| 固件编译 | `arduino-cli compile`（esp32 3.3.4 + M5Unified/M5GFX 0.3.0） | ✅ 通过，0 warning：`Sketch uses 2,800,551 bytes (89%) of 3 MB`，RAM 18% |
 | 字模渲染 | `tools/genfont.py --preview` | 28px 中文 + 18px ASCII 可读，759 KB |
 | 屏幕排版 | `tools/preview-ui.py` | 四个状态在 466 圆形安全区内，无溢出 |
 | 鲸鱼动画 | `tools/preview-fish.py` | 平静 / 开心 / 难过三种表情 |

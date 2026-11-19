@@ -1,6 +1,9 @@
 /**
  * Character sprites: the Live2D model baked into 8bpp frames by
  * tools/build_sprites.py (DS 鲸鱼娘, CC BY-NC-SA 4.0 — see assets/character/).
+ *
+ * Every state has 1–3 frames sampled from the model's idle motion; they play
+ * ping-pong so the loop never jumps.
  */
 
 #pragma once
@@ -16,21 +19,29 @@ class Character {
     kSad = 3,
   };
 
-  /** Allocate the sprite canvas; call once from UI::begin(). */
+  /** Allocate the frame canvases; call once from UI::begin(). */
   void begin(uint16_t background);
 
-  /** Switch mood; the frame is decoded into the canvas immediately. */
+  /** Switch mood; frames are decoded immediately. */
   void setMood(Mood mood);
 
-  /** Push the frame at (x, y); the canvas has an opaque background. */
+  /** Advance the ping-pong playback; call every loop. */
+  void tick(uint32_t now);
+
+  /** Push the current frame at (x, y); the canvas has an opaque background. */
   void push(int x, int y);
 
-  /** Width/height of the sprite in pixels. */
   static int width();
 
  private:
-  M5Canvas canvas_{&M5.Display};
+  static constexpr int kMaxFrames = 3;
+  M5Canvas frames_[kMaxFrames];
   Mood mood_ = kIdle;
+  int count_ = 0;
+  int index_ = 0;
+  int direction_ = 1;
+  uint32_t lastFrame_ = 0;
+  uint32_t frameMs_ = 280;
   bool ready_ = false;
   uint16_t background_ = 0;
 };
