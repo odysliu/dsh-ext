@@ -60,6 +60,7 @@ class UI : public LinkListener {
   uint32_t alertCount_ = 0;
   uint32_t denyArmedAt_ = 0;
   uint32_t vibrateUntil_ = 0;
+  bool alertPending_ = false;
   bool denyArmed_ = false;
 
   char resultText_[48] = {0};

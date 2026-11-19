@@ -72,7 +72,11 @@ node tools/flash.mjs --port /dev/cu.usbmodem1101     # Windows: --port COM5
 
 设备上电后会自动在局域网里找到这台电脑（UDP 广播发现），屏幕进入待机。
 
-### 4. 没有硬件？先用模拟器
+### 4. 确认审批策略是 `ask`
+
+手表只在**真的产生权限确认**时才会提醒。如果会话策略是 `never`（DSH 会直接拒绝、不弹确认），手表永远不会亮。在 Web 界面的权限设置里切回 `ask`，或使用 `/permission` 命令。
+
+### 5. 没有硬件？先用模拟器
 
 ```bash
 node tools/fake-device.mjs           # 模拟一块手表，自动接受/拒绝，可交互

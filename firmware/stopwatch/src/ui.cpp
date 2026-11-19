@@ -59,7 +59,13 @@ void UI::loop() {
   const uint32_t now = millis();
 
   if (state_ == kResult && now - stateSince_ > kResultMs) {
-    setState(hasPrompt_ ? kAlert : kIdle);
+    const State next = hasPrompt_ ? kAlert : kIdle;
+    setState(next);
+    if (hasPrompt_ && alertPending_) {
+      alertPending_ = false;
+      alertCount_ = 1;
+      alert(now);
+    }
   } else if (state_ == kNotice && now > noticeUntil_) {
     setState(hasPrompt_ ? kAlert : kIdle);
   }
@@ -295,10 +301,14 @@ void UI::onLinkDisconnected() {
 }
 
 void UI::onLinkPrompt(const PromptView& prompt) {
+  if (state_ == kPrompt) return;  // one prompt on screen at a time; the host queues the rest
   prompt_ = prompt;
   hasPrompt_ = true;
   alertCount_ = 0;
-  if (state_ == kResult) return;  // let the confirmation finish, then alert
+  if (state_ == kResult) {
+    alertPending_ = true;  // let the confirmation finish, then alert
+    return;
+  }
   setState(kAlert);
   M5.Power.setVibration(prompt.vibration ? 180 : 0);
   alert(millis());
