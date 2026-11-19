@@ -1,0 +1,15 @@
+{
+  "name": "dsh-live2d-pet-browser-test",
+  "private": true,
+  "type": "module",
+  "description": "Headless-browser verification harness for the dsh-live2d-pet plugin.",
+  "scripts": {
+    "suite": "node run-suite.mjs",
+    "suite:serial": "node run-suite.mjs --jobs 1",
+    "dev": "node dev.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

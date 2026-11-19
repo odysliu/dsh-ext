@@ -1,0 +1,79 @@
+// Wait for the plugin bundle to register, apply it with a stub context, then
+// poll the DOM for the rendered pet and publish the verdict.
+const report = { core: typeof window.Live2DCubismCore, vendor: typeof window.__dshLive2dPetVendor, applied: false, error: null, net: [], dom: null };
+
+function finish(verdict) {
+  report.dom = verdict;
+  let node = document.getElementById('__result');
+  if (node === null) { node = document.createElement('pre'); node.id = '__result'; document.body.appendChild(node); }
+  node.textContent = 'RESULT ' + JSON.stringify(report);
+  document.title = 'done';
+}
+
+// Record every fetch the plugin makes and its status.
+const realFetch = window.fetch;
+window.fetch = function (...args) {
+  const url = String(args[0]);
+  return realFetch.apply(this, args).then((response) => {
+    report.net.push(response.status + ' ' + url);
+    return response;
+  }, (error) => {
+    report.net.push('ERR ' + url + ' :: ' + (error && error.message));
+    throw error;
+  });
+};
+
+async function main() {
+  for (let i = 0; i < 100 && window.__pluginExports === undefined; i++) await new Promise(r => setTimeout(r, 50));
+  const exports = window.__pluginExports && window.__pluginExports['dsh-pet-live2d'];
+  if (exports === undefined) { report.error = window.__bootError || 'plugin bundle did not register'; return finish(null); }
+  try {
+    // 假 ctx：effect 是插件生命周期，slots 是 DSH 客户端界面的扩展点
+    // （设置页那一节、官方「插件」页的配置区都是这么挂上去的）。注册结果留在 window 上
+    // 给 driver 用：真实 DSH 里由宿主渲染，这里我们自己把它挂出来。
+    //
+    // 身份两种：list 槽（`settings.section`）用 `id`，keyed 槽（`plugins.bundle.config`，
+    // 键是**组合包的包名**）用 `key`。只认 `id` 的话 keyed 那种会静默变成 `undefined` 键
+    // —— 收下来一个 `sections[undefined]`，driver 找 `["dsh-pet-live2d"]` 永远是 undefined。
+    const sections = {};
+    exports.apply({
+      effect: (fn) => { try { return fn(); } catch { return () => {}; } },
+      slots: {
+        inject: (slotName, callback) => callback(),
+        register: (meta, render) => {
+          const identity = meta.key ?? meta.id;
+          sections[identity] = { meta, render };
+          return identity;
+        },
+      },
+    });
+    window.__pluginSections = sections;
+    report.applied = true;
+  } catch (error) { report.error = String(error && error.stack || error); return finish(null); }
+
+  let stage = null;
+  let canvas = null;
+  for (let i = 0; i < 300; i++) {
+    await new Promise(r => setTimeout(r, 100));
+    stage = document.querySelector('[data-dsh-live2d-pet-root] [data-stage]');
+    canvas = stage && stage.querySelector('canvas');
+    if (canvas !== null) break;
+  }
+  const bubble = document.querySelector('[data-dsh-live2d-pet-root] [data-bubble]');
+  const hint = document.querySelector('[data-dsh-live2d-pet-root] [data-hint]');
+  const verdict = {
+    stage: stage !== null,
+    canvas: canvas !== null,
+    canvasW: canvas === null ? 0 : canvas.width,
+    canvasH: canvas === null ? 0 : canvas.height,
+    webgl: (() => { try { return canvas !== null && (canvas.getContext('webgl2') !== null || canvas.getContext('webgl') !== null); } catch { return false; } })(),
+    bubble: bubble === null ? null : bubble.textContent,
+    hint: hint === null ? null : hint.textContent,
+    errors: window.__errors,
+  };
+  // Leave the UI untouched: the driver exercises it after the verdict lands.
+  await new Promise(r => setTimeout(r, 400));
+  finish(verdict);
+}
+
+main();
