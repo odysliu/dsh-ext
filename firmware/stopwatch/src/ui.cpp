@@ -122,7 +122,8 @@ void UI::alert(uint32_t now) {
 }
 
 void UI::playSound(const uint8_t* data, size_t size) {
-  M5.Speaker.playWav(data, size, 0, 1);
+  // M5Unified: playWav(data, length, repeat, channel, stop_current)
+  M5.Speaker.playWav(data, size, 1, 0);
 }
 
 void UI::animate() {

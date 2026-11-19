@@ -228,7 +228,8 @@ void Link::handleLine(char *line) {
     strlcpy(prompt.title, doc["title"] | "", sizeof(prompt.title));
     for (JsonVariant value : doc["lines"].as<JsonArray>()) {
       if (prompt.lineCount >= 8) break;
-      strlcpy(prompt.lines[prompt.lineCount], value.as<const char *>() ?: "", sizeof(prompt.lines[0]));
+      const char *line = value.as<const char *>();
+      strlcpy(prompt.lines[prompt.lineCount], line != nullptr ? line : "", sizeof(prompt.lines[0]));
       prompt.lineCount++;
     }
     prompt.seq = doc["seq"] | 1;
@@ -248,7 +249,10 @@ void Link::handleLine(char *line) {
   if (!strcmp(type, "notice")) {
     const char *line0 = "";
     JsonArray lines = doc["lines"].as<JsonArray>();
-    if (!lines.isNull() && lines.size() > 0) line0 = lines[0].as<const char *>() ?: "";
+    if (!lines.isNull() && lines.size() > 0) {
+      const char *text = lines[0].as<const char *>();
+      if (text != nullptr) line0 = text;
+    }
     listener_->onLinkNotice(doc["kind"] | "info", doc["text"] | "", line0);
     return;
   }
