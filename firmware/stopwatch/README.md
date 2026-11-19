@@ -34,6 +34,16 @@ python3 tools/genfont.py --font <NotoSansSC-Regular.otf> --out firmware/stopwatc
 python3 tools/gensounds.py --out firmware/stopwatch/src/assets/sounds.h
 ```
 
+## 角色图（自己画 / 找的图）
+
+把 PNG 放进 [`assets/character/`](assets/character)，命名 `idle.png` / `alert.png` / `happy.png` / `sad.png`（至少一张 `idle.png`），然后：
+
+```bash
+python3 tools/build_sprites.py
+```
+
+脚本会去背景、裁切、等比缩进 300×300、量化成 16 色 4bpp，生成 `src/assets/characters.h` 和一张预览图。要求见 [assets/character/README.md](assets/character/README.md)。
+
 ## 烧写
 
 ```bash

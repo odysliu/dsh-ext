@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Turn dropped-in character art into 4bpp sprite frames for the firmware.
+
+Put PNGs in firmware/stopwatch/assets/character/ (idle / alert / happy / sad),
+then run:
+
+    python3 tools/build_sprites.py
+
+It removes leftover backgrounds, crops to the artwork, fits it into a 300x300
+box, quantises to 16 colours (index 0 = transparent), and writes
+firmware/stopwatch/src/assets/characters.h plus a PNG preview of exactly what
+the panel will show.
+"""
+
+from __future__ import annotations
+
+import argparse
+import pathlib
+import sys
+
+from PIL import Image
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SRC_DIR = ROOT / "firmware" / "stopwatch" / "assets" / "character"
+OUT_HEADER = ROOT / "firmware" / "stopwatch" / "src" / "assets" / "characters.h"
+PREVIEW = ROOT / "tools" / ".cache" / "sprites-preview.png"
+
+SIZE = 300
+MARGIN = 0.06
+STATES = ["idle", "alert", "happy", "sad"]
+
+
+def find_source(state: str) -> pathlib.Path | None:
+    for pattern in (f"{state}.png", f"{state}.PNG", f"*{state}*.png", f"*{state}*.PNG"):
+        hits = sorted(SRC_DIR.glob(pattern))
+        if hits:
+            return hits[0]
+    return None
+
+
+def drop_background(img: Image.Image) -> Image.Image:
+    """Make a uniform background transparent; keep real alpha untouched."""
+    img = img.convert("RGBA")
+    alpha = img.getchannel("A")
+    if alpha.getextrema() != (255, 255):
+        return img
+
+    w, h = img.size
+    corners = [img.getpixel((0, 0)), img.getpixel((w - 1, 0)), img.getpixel((0, h - 1)), img.getpixel((w - 1, h - 1))]
+    corner = corners[0]
+    if any(max(abs(a - b) for a, b in zip(corner[:3], c[:3])) > 24 for c in corners[1:]):
+        print("  ! background is not uniform; leaving pixels as they are")
+        return img
+
+    pixels = img.load()
+    tolerance = 32
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = pixels[x, y]
+            if abs(r - corner[0]) <= tolerance and abs(g - corner[1]) <= tolerance and abs(b - corner[2]) <= tolerance:
+                pixels[x, y] = (r, g, b, 0)
+    return img
+
+
+def fit_square(img: Image.Image, size: int = SIZE) -> Image.Image:
+    """Crop to the artwork and fit it inside a square with a small margin."""
+    bbox = img.getchannel("A").getbbox()
+    if bbox is None:
+        raise SystemExit("artwork is fully transparent")
+    art = img.crop(bbox)
+    box = int(size * (1 - 2 * MARGIN))
+    scale = min(box / art.width, box / art.height)
+    art = art.resize((max(1, round(art.width * scale)), max(1, round(art.height * scale))), Image.LANCZOS)
+
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    canvas.alpha_composite(art, ((size - art.width) // 2, (size - art.height) // 2))
+    return canvas
+
+
+def quantize(img: Image.Image) -> tuple[Image.Image, list[tuple[int, int, int]]]:
+    """16-colour palette with index 0 reserved for transparency."""
+    rgb = Image.new("RGB", img.size, (9, 11, 22))
+    rgb.paste(img, (0, 0), img)
+    quant = rgb.quantize(colors=15, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    palette = quant.getpalette()[: 15 * 3]
+    colors = [tuple(palette[i * 3 : i * 3 + 3]) for i in range(15)]
+
+    indexed = Image.new("P", img.size, 0)
+    indexed.putpalette([0, 0, 0] + palette + [0] * (768 - 3 - len(palette)))
+    mask = img.getchannel("A").point(lambda a: 255 if a >= 128 else 0)
+    # shift the quantiser indices by one so index 0 stays "transparent"
+    shifted = quant.point(lambda v: min(15, v + 1))
+    indexed.paste(shifted, (0, 0), mask)
+    return indexed, colors
+
+
+def rgb565(color: tuple[int, int, int]) -> int:
+    r, g, b = color
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+
+
+def pack(indexed: Image.Image) -> bytes:
+    data = bytearray()
+    w, h = indexed.size
+    px = indexed.load()
+    for y in range(h):
+        for x in range(0, w, 2):
+            hi = px[x, y] & 0x0F
+            lo = px[x + 1, y] & 0x0F if x + 1 < w else 0
+            data.append((hi << 4) | lo)
+    return bytes(data)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--preview", default=str(PREVIEW))
+    args = parser.parse_args()
+
+    found = {state: find_source(state) for state in STATES}
+    if found["idle"] is None:
+        print(f"没有找到角色图。把 PNG 放进 {SRC_DIR.relative_to(ROOT)}/（至少 idle.png）再运行。")
+        print(f"当前目录内容：{sorted(p.name for p in SRC_DIR.glob('*'))}")
+        sys.exit(0)
+
+    sprites: dict[str, tuple[Image.Image, list]] = {}
+    for state in STATES:
+        path = found[state] or found["idle"]
+        print(f"{state:6s} <- {path.name}")
+        img = Image.open(path)
+        img.thumbnail((1200, 1200), Image.LANCZOS)
+        img = drop_background(img)
+        fitted = fit_square(img)
+        indexed, colors = quantize(fitted)
+        sprites[state] = (indexed, colors)
+
+    OUT_HEADER.parent.mkdir(parents=True, exist_ok=True)
+    with OUT_HEADER.open("w", encoding="utf-8") as handle:
+        handle.write("// Generated by tools/build_sprites.py from assets/character/*.png.\n")
+        handle.write("// 4bpp indexed sprites, palette entry 0 = transparent.\n")
+        handle.write("#pragma once\n\n#include <stdint.h>\n\n")
+        handle.write(f"#define CHAR_W {SIZE}\n#define CHAR_H {SIZE}\n#define CHAR_BYTES (CHAR_W * CHAR_H / 2)\n\n")
+        for state in STATES:
+            _, colors = sprites[state]
+            handle.write(f"static const uint16_t CHAR_{state.upper()}_PAL[16] = {{\n  0x0000,\n")
+            handle.write("".join(f"  0x{rgb565(c):04X},\n" for c in colors))
+            handle.write("  0x0000,\n};\n\n")
+            handle.write(f"static const uint8_t CHAR_{state.upper()}[CHAR_BYTES] = {{\n")
+            packed = pack(sprites[state][0])
+            for offset in range(0, len(packed), 24):
+                handle.write("  " + ",".join(str(b) for b in packed[offset : offset + 24]) + ",\n")
+            handle.write("};\n\n")
+
+    preview = Image.new("RGB", (SIZE * 4, SIZE), (9, 11, 22))
+    for index, state in enumerate(STATES):
+        indexed, colors = sprites[state]
+        rgba = Image.new("RGBA", indexed.size, (0, 0, 0, 0))
+        src = indexed.load()
+        dst = rgba.load()
+        for y in range(SIZE):
+            for x in range(SIZE):
+                value = src[x, y]
+                if value == 0:
+                    continue
+                r, g, b = colors[value - 1] if value - 1 < len(colors) else (255, 0, 255)
+                dst[x, y] = (r, g, b, 255)
+        preview.paste(rgba, (index * SIZE, 0), rgba)
+    pathlib.Path(args.preview).parent.mkdir(parents=True, exist_ok=True)
+    preview.save(args.preview)
+
+    print(f"\n✓ {OUT_HEADER.relative_to(ROOT)}  ({OUT_HEADER.stat().st_size / 1024:.0f} KiB)")
+    print(f"✓ preview {args.preview}")
+
+
+if __name__ == "__main__":
+    main()
