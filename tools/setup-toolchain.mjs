@@ -25,6 +25,10 @@ const CLI = join(BIN, process.platform === 'win32' ? 'arduino-cli.exe' : 'arduin
 
 const ESP32_INDEX = 'https://espressif.github.io/arduino-esp32/package_esp32_index.json'
 const CLI_VERSION = '1.6.0'
+
+// M5Unified CI covers arduino-esp32 2.0–3.x; 4.0.0 splits per-chip packages and
+// is not covered yet, so pin the newest 3.x unless the caller overrides it.
+const DEFAULT_CORE = '3.3.4'
 const LIBRARIES = ['M5Unified', 'M5GFX', 'ArduinoJson']
 
 const args = parseArgs(process.argv.slice(2))
@@ -117,7 +121,7 @@ async function ensureCli() {
 /** Install the ESP32 core and the sketch libraries. */
 function installPackages() {
   run(CLI, ['core', 'update-index', '--additional-urls', ESP32_INDEX])
-  const core = args.core ? `esp32:esp32@${args.core}` : 'esp32:esp32'
+  const core = `esp32:esp32@${args.core ?? DEFAULT_CORE}`
   run(CLI, ['core', 'install', core, '--additional-urls', ESP32_INDEX])
   run(CLI, ['lib', 'install', ...LIBRARIES])
   run(CLI, ['core', 'list'])
