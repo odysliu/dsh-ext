@@ -12,7 +12,7 @@
 | 局域网发现 | `tools/fake-device.mjs` 广播发现 | 收到 `{"t":"host"}` 并连上 10.184.47.60:47777 |
 | 握手 / 心跳 | 假设备日志 | `hello → welcome`，心跳正常 |
 | 真实 approval 链路 | 触发沙箱提权（写工作区外文件） | 插件收到请求并下发到设备；当时判定"内容过长"而回落 Web UI（已按真实 reason 修正阈值） |
-| 固件编译 | `arduino-cli compile` | 待工具链下载完成后执行 |
+| 固件编译 | `arduino-cli compile` | **未完成**：所需 ESP32 工具链约 1.4 GB，本次会话期间 GitHub Releases 下载速率只有 2 KB/s–60 KB/s，中途多次 reset；已清理半成品缓存，网络恢复后重跑即可 |
 | 字模渲染 | `tools/genfont.py --preview` | 28px 中文 + 18px ASCII 可读，759 KB |
 | 屏幕排版 | `tools/preview-ui.py` | 四个状态在 466 圆形安全区内，无溢出 |
 | 鲸鱼动画 | `tools/preview-fish.py` | 平静 / 开心 / 难过三种表情 |
@@ -25,6 +25,15 @@
 4. 心跳 10 分钟不掉线，断网/断电后自动重连；
 5. 待机 / 提醒状态的实际功耗与发热；
 6. 拒绝两次点击的触感是否符合预期。
+
+## 编译复现
+
+```bash
+node tools/setup-toolchain.mjs          # arduino-cli + esp32 3.3.4 + M5Unified/M5GFX/ArduinoJson
+node tools/flash.mjs --compile-only     # 只编译，验证通过后 --port 烧写
+```
+
+网络要求：首次需要下载约 1.4 GB（ESP32 工具链 + IDF 预编译库），建议在网络稳定时执行；中断后重跑会重新下载未完成的包。
 
 ## 已知限制
 

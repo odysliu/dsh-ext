@@ -58,10 +58,10 @@ cd dsh-ext
 ### 2. 准备固件工具链
 
 ```bash
-node tools/setup-toolchain.mjs     # 下载 arduino-cli + ESP32 core + M5Unified（约 1–2 GB）
+node tools/setup-toolchain.mjs     # 下载 arduino-cli + ESP32 core 3.3.4 + M5Unified（约 1.4 GB）
 ```
 
-Windows 上用 PowerShell 执行同一条命令即可；脚本会按平台选择 `arduino-cli` 的发行包。
+Windows 上用 PowerShell 执行同一条命令即可；脚本会按平台选择 `arduino-cli` 的发行包。首次下载体积较大且依赖 GitHub Releases，建议在网络稳定时执行；中断后重跑即可。
 
 ### 3. 配置 WiFi 并烧写
 

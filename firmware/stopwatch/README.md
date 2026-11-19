@@ -37,7 +37,7 @@ python3 tools/gensounds.py --out firmware/stopwatch/src/assets/sounds.h
 ## 烧写
 
 ```bash
-node tools/setup-toolchain.mjs            # 首次：下载 arduino-cli + ESP32 core + M5Unified
+node tools/setup-toolchain.mjs            # 首次：下载 arduino-cli + ESP32 core 3.3.4 + M5Unified（约 1.4 GB）
 node tools/configure.mjs --ssid "家里WiFi" --password "密码"
 node tools/flash.mjs                      # 自动找串口；或 --port /dev/cu.usbmodem1101 / COM5
 ```
