@@ -4,7 +4,7 @@
 
 #include "assets/sounds.h"
 #include "config.h"
-#include "fish.h"
+#include "character.h"
 #include "text.h"
 
 namespace {
@@ -25,8 +25,7 @@ constexpr uint16_t kAccent = rgb(77, 107, 254);
 constexpr uint16_t kDanger = rgb(255, 96, 120);
 
 constexpr int kFishX = 83;
-constexpr int kFishY = 12;
-constexpr int kFishSize = 300;
+constexpr int kFishY = 36;
 
 constexpr int kButtonY = 332;
 constexpr int kButtonH = 56;
@@ -42,8 +41,7 @@ constexpr uint32_t kAlertRepeatMs = 4200;
 
 void UI::begin(Link* link) {
   link_ = link;
-  fishSprite_.setPsram(true);
-  fishSprite_.createSprite(kFishSize, kFishSize);
+  character_.begin(kBg);
   M5.Display.setBrightness(brightness_);
   setState(kBoot);
 }
@@ -131,11 +129,7 @@ void UI::animate() {
   const uint32_t now = millis();
   if (now - lastFrame_ < STOPWATCH_FRAME_MS) return;
   lastFrame_ = now;
-
-  fishSprite_.fillScreen(kBg);
-  const int mood = (state_ == kAlert) ? fish::kCalm : fish::kCalm;
-  fish::draw(fishSprite_, kFishSize / 2, kFishSize / 2 - 8, 280, mood, now, kBg);
-  fishSprite_.pushSprite(kFishX, kFishY);
+  character_.push(kFishX, kFishY);
 }
 
 void UI::render() {
@@ -179,12 +173,14 @@ void UI::renderBoot() {
 
 void UI::renderIdle() {
   M5.Display.fillScreen(kBg);
+  character_.setMood(state_ == kAlert ? Character::kAlert : Character::kIdle);
+  character_.push(kFishX, kFishY);
   drawStatusLine();
 }
 
 void UI::drawStatusLine() {
   const bool connected = link_ != nullptr && link_->connected();
-  const int y = 330;
+  const int y = 346;
   if (state_ == kAlert) {
     const char* label = "有确认请求";
     text::drawCentered(M5.Display, kCx, y, label, kText, kBg);
@@ -195,6 +191,8 @@ void UI::drawStatusLine() {
     text::drawCentered(M5.Display, kCx, y, "未连接", kMuted, kBg);
   }
 
+  if (state_ == kAlert) return;  // keep the alert screen to one clear line
+
   char footer[40];
   const int battery = link_ != nullptr ? link_->battery() : -1;
   if (battery >= 0) {
@@ -202,7 +200,7 @@ void UI::drawStatusLine() {
   } else {
     snprintf(footer, sizeof(footer), "%ddBm", link_ != nullptr ? link_->rssi() : 0);
   }
-  text::drawCentered(M5.Display, kCx, 404, footer, kMuted, kBg);
+  text::drawCentered(M5.Display, kCx, 412, footer, kMuted, kBg);
 }
 
 void UI::drawButton(int x, int y, int w, int h, const char* label, uint16_t fill, uint16_t textColor,
@@ -247,8 +245,10 @@ void UI::renderPrompt() {
 void UI::renderResult() {
   M5.Display.setBrightness(STOPWATCH_BRIGHTNESS_IDLE);
   brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
-  const uint16_t color = resultMood_ == fish::kHappy ? kAccent : kMuted;
-  text::drawCentered(M5.Display, kCx, 196, resultText_, color, kBg);
+  character_.setMood(resultMood_);
+  character_.push(kFishX, kFishY);
+  const uint16_t color = resultMood_ == Character::kHappy ? kAccent : kMuted;
+  text::drawCentered(M5.Display, kCx, 356, resultText_, color, kBg);
 }
 
 void UI::renderNotice() {
@@ -270,7 +270,7 @@ void UI::handleTap(int x, int y) {
       }
       if (link_ != nullptr) link_->sendDecision(prompt_.id, "deny", millis() - stateSince_);
       strlcpy(resultText_, "已拒绝", sizeof(resultText_));
-      resultMood_ = fish::kSad;
+      resultMood_ = Character::kSad;
       playSound(SOUND_DENY, sizeof(SOUND_DENY));
       setState(kResult);
       return;
@@ -278,7 +278,7 @@ void UI::handleTap(int x, int y) {
     if (x >= kAllowX && x <= kAllowX + kButtonW) {
       if (link_ != nullptr) link_->sendDecision(prompt_.id, "allow", millis() - stateSince_);
       strlcpy(resultText_, "已同意", sizeof(resultText_));
-      resultMood_ = fish::kHappy;
+      resultMood_ = Character::kHappy;
       playSound(SOUND_ALLOW, sizeof(SOUND_ALLOW));
       setState(kResult);
       return;
@@ -287,7 +287,7 @@ void UI::handleTap(int x, int y) {
   if (y >= 392) {
     if (link_ != nullptr) link_->sendDecision(prompt_.id, "delegate", millis() - stateSince_);
     strlcpy(resultText_, "请在电脑处理", sizeof(resultText_));
-    resultMood_ = fish::kCalm;
+    resultMood_ = Character::kIdle;
     setState(kResult);
   }
 }
@@ -324,7 +324,7 @@ void UI::onLinkClose(const char* id, const char* outcome, const char* text) {
   } else {
     strlcpy(resultText_, outcome, sizeof(resultText_));
   }
-  resultMood_ = strcmp(outcome, "allowed-once") == 0 ? fish::kHappy : fish::kCalm;
+  resultMood_ = strcmp(outcome, "allowed-once") == 0 ? Character::kHappy : Character::kIdle;
   setState(kResult);
 }
 

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>live2d bake</title>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<script>
+  window.__errors = [];
+  window.addEventListener('error', (event) => {
+    window.__errors.push('error: ' + (event.message || event.filename || 'unknown'));
+  }, true);
+</script>
+<script src="/tools/.cache/live2dcubismcore.min.js" onerror="window.__errors.push('cubism core 404')"></script>
+<script src="/tools/dsh-pet-live2d-main/dsh-live2d-pet/lib/live2d-vendor.js" onerror="window.__errors.push('vendor 404')"></script>
+<script>
+  // Renders one expression of the DS 鲸鱼娘 model at a fixed size and exposes
+  // window.__state so the bake driver knows when a frame is ready.
+  const params = new URLSearchParams(location.search);
+  const modelUrl = params.get('model');
+  const expr = params.get('expr') || '';
+  const size = Number(params.get('size') || 1024);
+  const zoom = Number(params.get('zoom') || 1);
+  const offsetY = Number(params.get('oy') || 0);
+  const offsetX = Number(params.get('ox') || 0);
+
+  window.__state = 'booting';
+  window.__error = '';
+
+  (async () => {
+    try {
+      const V = window.__dshLive2dPetVendor;
+      if (!V) throw new Error('vendor missing: ' + JSON.stringify(window.__errors));
+      V.configureCubismSDK();
+      // PIXI v8: init() is async and the element is app.canvas
+      const app = new V.Application();
+      await app.init({
+        width: size,
+        height: size,
+        backgroundAlpha: 0,
+        antialias: true,
+        preserveDrawingBuffer: true,
+        autoStart: true,
+        resolution: 1,
+        hello: false,
+      });
+      document.body.appendChild(app.canvas);
+      const model = await V.Live2DModel.from(modelUrl, { autoInteract: false });
+      app.stage.addChild(model);
+      const scale = (size * zoom) / Math.max(model.width, model.height);
+      model.anchor.set(0.5, 0.5);
+      model.scale.set(scale);
+      model.x = size / 2 + offsetX;
+      model.y = size / 2 + offsetY;
+      window.__model = model;
+      window.__app = app;
+
+      if (expr) {
+        try { model.expression(expr); } catch (error) { window.__error = String(error); }
+      }
+
+      let frames = 0;
+      app.ticker.add(() => {
+        frames += 1;
+        if (frames === 40) window.__state = 'ready';
+      });
+      window.__state = 'loading';
+    } catch (error) {
+      window.__error = String(error && error.stack || error);
+      window.__state = 'failed';
+    }
+  })();
+</script>
+</body>
+</html>

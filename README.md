@@ -97,4 +97,7 @@ node tools/fake-device.mjs           # 模拟一块手表，自动接受/拒绝�
 
 ## 许可
 
-MIT
+- 代码（插件、固件、工具）：**MIT**
+- 角色素材 `firmware/stopwatch/assets/character/` 与生成的精灵帧：**CC BY-NC-SA 4.0**
+  （DS鲸鱼娘，作者 上善无形 / ZipZipPipe / 氵六青，来源 [dsh-pet-live2d](https://github.com/A8Chann/dsh-pet-live2d)；
+  仅限非商业，详见 [NOTICE](firmware/stopwatch/assets/character/NOTICE.md)）

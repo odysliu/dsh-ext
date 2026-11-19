@@ -7,6 +7,7 @@
 
 #include <M5Unified.h>
 
+#include "character.h"
 #include "config.h"
 #include "link.h"
 
@@ -67,8 +68,8 @@ class UI : public LinkListener {
   char noticeText_[80] = {0};
   char noticeLine_[80] = {0};
   uint32_t noticeUntil_ = 0;
-  uint8_t resultMood_ = 0;
+  Character::Mood resultMood_ = Character::kIdle;
 
   uint8_t brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
-  M5Canvas fishSprite_{&M5.Display};
+  Character character_;
 };
