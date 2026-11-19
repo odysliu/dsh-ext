@@ -1,0 +1,22 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax check
+        run: |
+          for file in $(find packages tools -name '*.js' -o -name '*.mjs' | grep -v node_modules); do
+            node --check "$file"
+          done
+      - name: Host plugin tests
+        run: node --test "packages/stopwatch-bridge/test/*.test.js"

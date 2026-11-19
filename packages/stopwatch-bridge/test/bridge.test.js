@@ -150,7 +150,7 @@ test('a request that does not fit only posts a notice', async (t) => {
   assert.deepEqual(watch.messages.filter((message) => message.t === 'prompt'), [])
 })
 
-test('notify mode mirrors nothing and always asks the Web UI', async (t) => {
+test('notify mode mirrors the request without claiming it', async (t) => {
   const harness = await setup({ mode: 'notify' })
   t.after(() => harness.bridge.stop())
   const watch = await harness.pair()
@@ -162,7 +162,9 @@ test('notify mode mirrors nothing and always asks the Web UI', async (t) => {
   })
   assert.equal(result, 'fallback')
   assert.equal(fellBack, true)
-  assert.deepEqual(watch.messages, [])
+  const notice = await watch.next('notice')
+  assert.equal(notice.kind, 'pending')
+  assert.ok(notice.lines.length > 0)
 })
 
 test('without a watch the request never waits', async (t) => {

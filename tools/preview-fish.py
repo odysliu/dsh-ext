@@ -1,72 +1,111 @@
 #!/usr/bin/env python3
-"""Render the whale geometry off-device so the art can be iterated without hardware.
+"""Render the whale off-device so the art can be iterated without hardware.
 
-This mirrors firmware/stopwatch/src/fish.cpp closely enough to judge
-proportions and face expressions; it is a design tool, not a test.
+Mirrors firmware/stopwatch/src/fish.cpp closely enough to judge proportions and
+facial expressions; it is a design tool, not a test.
 """
 import math
 import sys
+
 from PIL import Image, ImageDraw
 
-BG = (10, 12, 24)
+BG = (9, 11, 22)
 BODY = (77, 107, 254)
-BODY_DARK = (58, 82, 214)
-BELLY = (199, 212, 255)
+FIN = (52, 74, 205)
+BELLY = (168, 188, 255)
 WHITE = (255, 255, 255)
-PUPIL = (22, 32, 74)
-BLUSH = (255, 158, 181)
-MOUTH = (26, 38, 88)
+PUPIL = (18, 26, 64)
+BLUSH = (255, 150, 175)
+MOUTH = (24, 34, 80)
 
 
-def draw_whale(d, cx, cy, size, mood, now):
-    s = float(size)
-    bob = math.sin(now / 780.0) * s * 0.018
-    wag = math.sin(now / 320.0)
-    x, y = cx, int(cy + bob)
-    hinge = x - int(s * 0.26)
-    tipx = x - int(s * (0.50 + 0.02 * wag))
-    tip_top = y - int(s * 0.24) + int(s * 0.05 * wag)
-    tip_bot = y + int(s * 0.22) + int(s * 0.05 * wag)
-    waist = x - int(s * 0.36)
-    d.polygon([(hinge, y - int(s*0.03)), (tipx, tip_top), (waist, y + int(s*0.02))], fill=BODY_DARK)
-    d.polygon([(hinge, y + int(s*0.03)), (tipx, tip_bot), (waist, y - int(s*0.02))], fill=BODY_DARK)
-    d.polygon([(x-int(s*0.06), y-int(s*0.20)), (x+int(s*0.07), y-int(s*0.22)), (x-int(s*0.01), y-int(s*0.37))], fill=BODY_DARK)
-    d.ellipse([x-int(s*0.33), y-int(s*0.25), x+int(s*0.33), y+int(s*0.25)], fill=BODY)
-    d.ellipse([x+int(s*0.02)-int(s*0.26), y+int(s*0.08)-int(s*0.14), x+int(s*0.02)+int(s*0.26), y+int(s*0.08)+int(s*0.14)], fill=BELLY)
-    d.polygon([(x-int(s*0.05), y+int(s*0.13)), (x+int(s*0.05), y+int(s*0.29)), (x+int(s*0.11), y+int(s*0.10))], fill=BODY_DARK)
+def draw_whale(d, x0, y0, size, mood, now):
+    """Draw one whale into a 300x300 box at (x0, y0)."""
+    u = size / 300.0
 
-    ex, ey = x + int(s*0.13), y - int(s*0.06)
-    er = int(s*0.045)
-    if mood == 'happy':
-        d.line([(ex-er, ey+er//2), (ex, ey-er//2), (ex+er, ey+er//2)], fill=PUPIL, width=3)
-    elif mood == 'sad':
-        d.line([(ex-er, ey-er//2), (ex+er, ey+er//2)], fill=PUPIL, width=3)
-        d.line([(ex-er, ey+er//2), (ex+er, ey-er//2)], fill=PUPIL, width=3)
+    def X(v):
+        return x0 + v * u
+
+    def Y(v):
+        return y0 + v * u
+
+    def S(v):
+        return v * u
+
+    bob = math.sin(now / 780.0) * 4.0
+    wag = math.sin(now / 320.0) * 5.0
+
+    def Yb(v):
+        return Y(v + bob)
+
+    # tail fluke
+    for tri in (
+        ((64, 142), (16, 108 - wag), (36, 150)),
+        ((64, 158), (16, 192 + wag), (36, 150)),
+        ((36, 150), (16, 108 - wag), (64, 158)),
+        ((36, 150), (16, 192 + wag), (64, 142)),
+    ):
+        d.polygon([(X(a), Yb(b)) for a, b in tri], fill=FIN)
+
+    # body + head volume
+    d.ellipse([X(150 - 104), Yb(152 - 80), X(150 + 104), Yb(152 + 80)], fill=BODY)
+    d.ellipse([X(191 - 71), Yb(171 - 39), X(191 + 71), Yb(171 + 39)], fill=BODY)
+
+    # dorsal fin
+    d.polygon([(X(108), Yb(86)), (X(136), Yb(104)), (X(100), Yb(108))], fill=FIN)
+
+    # underside
+    d.ellipse([X(157 - 53), Yb(208 - 22), X(157 + 53), Yb(208 + 22)], fill=BELLY)
+
+    # flipper
+    d.polygon([(X(92), Yb(190)), (X(118), Yb(214)), (X(90), Yb(218))], fill=FIN)
+
+    eye_x, eye_y, eye_r = 196, 134, 15
+    if mood == "happy":
+        d.line([(X(eye_x - eye_r), Yb(eye_y + 6)), (X(eye_x), Yb(eye_y - 7)), (X(eye_x + eye_r), Yb(eye_y + 6))],
+               fill=PUPIL, width=max(2, int(S(5))))
+    elif mood == "sad":
+        w = max(2, int(S(5)))
+        d.line([(X(eye_x - eye_r), Yb(eye_y - 6)), (X(eye_x + eye_r), Yb(eye_y + 6))], fill=PUPIL, width=w)
+        d.line([(X(eye_x - eye_r), Yb(eye_y + 6)), (X(eye_x + eye_r), Yb(eye_y - 6))], fill=PUPIL, width=w)
     else:
-        d.ellipse([ex-er, ey-er, ex+er, ey+er], fill=WHITE)
-        pr = int(er*0.55)
-        d.ellipse([ex+er//4-pr, ey+er//8-pr, ex+er//4+pr, ey+er//8+pr], fill=PUPIL)
+        d.ellipse([X(eye_x - eye_r), Yb(eye_y - eye_r), X(eye_x + eye_r), Yb(eye_y + eye_r)], fill=WHITE)
+        d.ellipse([X(eye_x + 2 - 9), Yb(eye_y + 2 - 9), X(eye_x + 2 + 9), Yb(eye_y + 2 + 9)], fill=PUPIL)
+        d.ellipse([X(eye_x - 7), Yb(eye_y - 7), X(eye_x - 1), Yb(eye_y - 1)], fill=WHITE)
 
-    d.ellipse([x+int(s*0.23)-int(s*0.045), y+int(s*0.06)-int(s*0.028), x+int(s*0.23)+int(s*0.045), y+int(s*0.06)+int(s*0.028)], fill=BLUSH)
+    d.ellipse([X(228 - 12), Yb(162 - 6), X(228 + 12), Yb(162 + 6)], fill=BLUSH)
 
-    mx, my = x + int(s*0.06), y + int(s*0.07)
-    if mood == 'happy':
-        d.ellipse([mx+int(s*0.04)-int(s*0.055), my+int(s*0.02)-int(s*0.045), mx+int(s*0.04)+int(s*0.055), my+int(s*0.02)+int(s*0.045)], fill=MOUTH)
-    elif mood == 'sad':
-        d.line([(mx, my+int(s*0.02)), (mx+int(s*0.03), my), (mx+int(s*0.06), my+int(s*0.015))], fill=MOUTH, width=3)
+    mouth_x, mouth_y = 164, 158
+    if mood == "happy":
+        d.ellipse([X(mouth_x), Yb(mouth_y), X(mouth_x + 22), Yb(mouth_y + 13)], fill=MOUTH)
+        d.ellipse([X(mouth_x + 5), Yb(mouth_y + 7), X(mouth_x + 17), Yb(mouth_y + 13)], fill=BLUSH)
     else:
-        d.line([(mx, my), (mx+int(s*0.03), my+int(s*0.015)), (mx+int(s*0.06), my)], fill=MOUTH, width=3)
+        width = max(2, int(S(3)))
+        if mood == "sad":
+            d.line([(X(mouth_x), Yb(mouth_y + 7)), (X(mouth_x + 10), Yb(mouth_y + 2)),
+                    (X(mouth_x + 20), Yb(mouth_y + 7))], fill=MOUTH, width=width)
+        else:
+            d.line([(X(mouth_x), Yb(mouth_y)), (X(mouth_x + 10), Yb(mouth_y + 5)),
+                    (X(mouth_x + 20), Yb(mouth_y))], fill=MOUTH, width=width)
+
+    for index in range(3):
+        phase = (now / 1600.0 + index * 0.33) % 1.0
+        bubble_x = 188 + 10 * math.sin(phase * 6.283 + index)
+        bubble_y = 64 - 46 * phase
+        radius = max(1, int(S(8 - 4 * phase)))
+        color = tuple(int(BG[k] + (BODY[k] - BG[k]) * (1 - phase)) for k in range(3))
+        d.ellipse([X(bubble_x) - radius, Y(bubble_y) - radius, X(bubble_x) + radius, Y(bubble_y) + radius],
+                  fill=color)
 
 
 def main(out):
-    W = 466
-    img = Image.new('RGB', (W * 3 + 40, 420), BG)
-    for i, mood in enumerate(['calm', 'happy', 'sad']):
-        d = ImageDraw.Draw(img)
-        draw_whale(d, 120 + i * (W + 20) + 0, 210, 300, mood, 0)
-    img.save(out)
-    print('saved', out)
+    width = 466
+    canvas = Image.new("RGB", (width * 3 + 40, width), BG)
+    for index, mood in enumerate(["calm", "happy", "sad"]):
+        draw_whale(ImageDraw.Draw(canvas), index * (width + 20) + 83, 83, 300, mood, 0)
+    canvas.save(out)
+    print("saved", out)
 
 
-if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else 'tools/.cache/fish.png')
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else "tools/.cache/fish.png")

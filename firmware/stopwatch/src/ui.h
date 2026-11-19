@@ -69,5 +69,5 @@ class UI : public LinkListener {
   uint8_t resultMood_ = 0;
 
   uint8_t brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
-  M5Canvas fishSprite_;
+  M5Canvas fishSprite_{&M5.Display};
 };

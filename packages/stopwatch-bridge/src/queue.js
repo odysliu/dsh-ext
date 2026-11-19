@@ -105,6 +105,25 @@ export class ApprovalQueue {
     this.watchAbort(entry)
   }
 
+  /** Re-send the active prompt after a reconnect. */
+  refresh() {
+    const entry = this.active
+    if (entry === null || entry.settled) return
+    this.send({
+      t: 'prompt',
+      id: entry.id,
+      seq: 1,
+      total: 1 + this.pending.length,
+      tool: entry.view.tool,
+      title: entry.view.title,
+      lines: entry.view.lines,
+      timeoutMs: this.timeoutMs,
+      buttons: BUTTONS,
+      sound: this.alert.sound !== false,
+      vibration: this.alert.vibration !== false,
+    })
+  }
+
   /**
    * A decision arrived from the device.
    * @param {string} id - prompt id echoed by the device.

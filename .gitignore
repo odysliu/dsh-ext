@@ -11,6 +11,7 @@ firmware/**/.pio/
 firmware/stopwatch/src/secrets.h
 tools/.cache/
 
+
 # OS noise
 .DS_Store
 Thumbs.db

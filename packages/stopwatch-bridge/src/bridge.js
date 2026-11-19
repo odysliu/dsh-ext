@@ -49,7 +49,10 @@ export class Bridge {
     this.started = true
 
     this.onDevice = (device) => {
-      if (device !== null) return
+      if (device !== null) {
+        this.queue.refresh()
+        return
+      }
       this.queue.failAll('offline')
     }
     this.onMessage = (message) => this.handleDeviceMessage(message)
@@ -99,7 +102,10 @@ export class Bridge {
    * @returns {Promise<string>} the approval outcome.
    */
   async onApproval(request, next) {
-    if (this.config.mode !== 'remote') return next()
+    if (this.config.mode !== 'remote') {
+      this.notifyOnly(request)
+      return next()
+    }
     if (this.server.device === null) return next()
     if (!this.toolAllowed(request.toolName)) return next()
 
@@ -131,6 +137,28 @@ export class Bridge {
       this.logger?.info?.(`stopwatch-bridge: ${outcome}; asking in the Web UI instead`)
     }
     return next()
+  }
+
+  /**
+   * Notify-only mode: mirror the request on the watch without claiming it.
+   * @param {any} request - approval request.
+   */
+  notifyOnly(request) {
+    if (this.server.device === null) return
+    if (!this.toolAllowed(request.toolName)) return
+    let view
+    try {
+      view = buildPromptView(request, this.previews.take(request.callId), this.config)
+    } catch {
+      return
+    }
+    this.server.send({
+      t: 'notice',
+      kind: 'pending',
+      text: '有确认请求',
+      lines: view.lines,
+      ttlMs: 6000,
+    })
   }
 
   /**

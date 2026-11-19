@@ -23,16 +23,15 @@ constexpr uint16_t kText = rgb(232, 236, 255);
 constexpr uint16_t kMuted = rgb(128, 140, 178);
 constexpr uint16_t kAccent = rgb(77, 107, 254);
 constexpr uint16_t kDanger = rgb(255, 96, 120);
-constexpr uint16_t kBody = rgb(77, 107, 254);
 
-constexpr int kFishX = 73;
-constexpr int kFishY = 28;
-constexpr int kFishSize = 320;
+constexpr int kFishX = 83;
+constexpr int kFishY = 12;
+constexpr int kFishSize = 300;
 
 constexpr int kButtonY = 332;
 constexpr int kButtonH = 56;
-constexpr int kButtonW = 150;
-constexpr int kDenyX = 56;
+constexpr int kButtonW = 146;
+constexpr int kDenyX = 60;
 constexpr int kAllowX = 260;
 
 constexpr uint32_t kResultMs = 1600;
@@ -128,7 +127,7 @@ void UI::animate() {
 
   fishSprite_.fillScreen(kBg);
   const int mood = (state_ == kAlert) ? fish::kCalm : fish::kCalm;
-  fish::draw(fishSprite_, kFishSize / 2, kFishSize / 2 - 6, 300, mood, now, kBg);
+  fish::draw(fishSprite_, kFishSize / 2, kFishSize / 2 - 8, 280, mood, now, kBg);
   fishSprite_.pushSprite(kFishX, kFishY);
 }
 
@@ -178,7 +177,7 @@ void UI::renderIdle() {
 
 void UI::drawStatusLine() {
   const bool connected = link_ != nullptr && link_->connected();
-  const int y = 384;
+  const int y = 330;
   if (state_ == kAlert) {
     const char* label = "有确认请求";
     text::drawCentered(M5.Display, kCx, y, label, kText, kBg);
@@ -196,7 +195,7 @@ void UI::drawStatusLine() {
   } else {
     snprintf(footer, sizeof(footer), "%ddBm", link_ != nullptr ? link_->rssi() : 0);
   }
-  text::drawCentered(M5.Display, kCx, 428, footer, kMuted, kBg);
+  text::drawCentered(M5.Display, kCx, 404, footer, kMuted, kBg);
 }
 
 void UI::drawButton(int x, int y, int w, int h, const char* label, uint16_t fill, uint16_t textColor,
@@ -226,7 +225,7 @@ void UI::renderPrompt() {
   }
   text::drawCentered(M5.Display, kCx, 78, meta, kAccent, kBg);
 
-  int y = 116;
+  int y = 112;
   for (int i = 0; i < prompt_.lineCount && i < 6; i++) {
     text::drawCentered(M5.Display, kCx, y, prompt_.lines[i], kText, kBg);
     y += text::kLineHeight;
