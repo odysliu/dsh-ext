@@ -116,7 +116,8 @@ bool Link::discoverHost(uint32_t timeoutMs) {
   udp_.begin(0);
   const IPAddress broadcast(255, 255, 255, 255);
   udp_.beginPacket(broadcast, STOPWATCH_DISCOVERY_PORT);
-  udp_.write("{\"t\":\"discover\",\"proto\":1}");
+  static const char kDiscover[] = "{\"t\":\"discover\",\"proto\":1}";
+  udp_.write(reinterpret_cast<const uint8_t*>(kDiscover), strlen(kDiscover));
   if (udp_.endPacket() == 0) {
     udp_.stop();
     return false;

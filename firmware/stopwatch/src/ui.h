@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <M5GFX.h>
+#include <M5Unified.h>
 
 #include "config.h"
 #include "link.h"

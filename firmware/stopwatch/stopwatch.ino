@@ -9,8 +9,9 @@
 #include "src/link.h"
 #include "src/ui.h"
 
-Link link;
-UI ui;
+// `link` collides with POSIX link(2) from <unistd.h>, so use g-prefixed globals.
+Link gLink;
+UI gUi;
 
 void setup() {
   auto cfg = M5.config();
@@ -24,13 +25,13 @@ void setup() {
   M5.Display.setBrightness(STOPWATCH_BRIGHTNESS_IDLE);
   M5.Speaker.setVolume(140);
 
-  ui.begin(&link);
-  link.begin(&ui);
+  gUi.begin(&gLink);
+  gLink.begin(&gUi);
 }
 
 void loop() {
   M5.update();
-  link.loop();
-  ui.loop();
+  gLink.loop();
+  gUi.loop();
   delay(1);
 }
