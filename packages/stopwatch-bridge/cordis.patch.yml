@@ -1,0 +1,5 @@
+# stopwatch-bridge bundle patch: mounts the host plugin that owns the device
+# server, the LAN discovery beacon, and the approval answerer.
+- insert:
+    - id: stopwatch-bridge
+      name: '@dsh-ext/stopwatch-bridge'

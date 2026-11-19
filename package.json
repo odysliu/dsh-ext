@@ -1,0 +1,13 @@
+{
+  "name": "dsh-ext",
+  "private": true,
+  "version": "0.1.0",
+  "description": "External extensions for DeepSeek Harness, plus the M5Stack StopWatch firmware that mirrors them.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test packages/stopwatch-bridge/test",
+    "fake-device": "node tools/fake-device.mjs",
+    "setup": "node tools/setup-toolchain.mjs"
+  },
+  "license": "MIT"
+}

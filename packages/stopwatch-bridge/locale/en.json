@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "StopWatch approvals",
+    "description": "Sends permission prompts to an M5Stack StopWatch: the watch blinks, and a tap approves or rejects."
+  }
+}

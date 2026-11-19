@@ -1,0 +1,12 @@
+# Generated firmware assets: huge, machine-written, never hand-edited.
+firmware/stopwatch/src/assets/font_cn.h -diff linguist-generated
+firmware/stopwatch/src/assets/sounds.h -diff linguist-generated
+
+# Keep the protocol stable across platforms.
+*.md text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.ino text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf

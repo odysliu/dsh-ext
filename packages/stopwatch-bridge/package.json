@@ -1,0 +1,39 @@
+{
+  "name": "@dsh-ext/stopwatch-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Route DeepSeek Harness approval prompts to an M5Stack StopWatch over WiFi: the watch blinks, shows the pending decision, and answers it.",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis-plugin",
+    "m5stack",
+    "stopwatch"
+  ],
+  "license": "MIT"
+}

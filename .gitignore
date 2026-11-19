@@ -1,0 +1,16 @@
+# toolchain (downloaded by tools/setup-toolchain.mjs)
+.tools/
+node_modules/
+.pnpm-store/
+
+# firmware build output
+firmware/**/build/
+firmware/**/.pio/
+
+# local secrets (WiFi credentials, device token)
+firmware/stopwatch/src/secrets.h
+tools/.cache/
+
+# OS noise
+.DS_Store
+Thumbs.db

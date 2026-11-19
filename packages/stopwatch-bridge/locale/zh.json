@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "StopWatch 手表确认",
+    "description": "把会话里的权限确认推到 M5Stack StopWatch：手表闪烁提醒，点屏幕即可同意或否决。"
+  }
+}
