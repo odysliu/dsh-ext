@@ -160,13 +160,14 @@ async function prefetchArchives(coreVersion) {
     return false
   }
 
-  const targets = [{ url: platform.url, file: platform.archiveFileName, size: platform.size }]
+  // the index serialises sizes as strings — normalise or every comparison fails
+  const targets = [{ url: platform.url, file: platform.archiveFileName, size: Number(platform.size) }]
   for (const dep of platform.toolsDependencies) {
     const tool = pkg.tools.find((entry) => entry.name === dep.name && entry.version === dep.version)
     if (tool === undefined) continue
     const system = pickSystem(tool.systems)
     if (system === undefined) continue
-    targets.push({ url: system.url, file: system.archiveFileName, size: system.size })
+    targets.push({ url: system.url, file: system.archiveFileName, size: Number(system.size) })
   }
 
   const dir = join(TOOLS, 'dl', 'packages')
@@ -232,10 +233,14 @@ async function installPackages() {
   await prefetchArchives(coreVersion)
   run(CLI, ['core', 'install', `esp32:esp32@${coreVersion}`, '--additional-urls', ESP32_INDEX])
   for (const library of LIBRARIES) {
-    const result = spawnSync(CLI, ['lib', 'install', library], { stdio: 'inherit', env: { ...process.env, ...cliEnv() } })
-    if (result.status !== 0) {
-      console.log(`! ${library} failed via the library index, retrying with git`)
-      run(CLI, ['lib', 'install', '--git-url', `https://github.com/${gitPath(library)}.git`])
+    // git is much faster than the library index CDN and pins nothing we rely on
+    const viaGit = spawnSync(CLI, ['lib', 'install', '--git-url', `https://github.com/${gitPath(library)}.git`], {
+      stdio: 'inherit',
+      env: { ...process.env, ...cliEnv() },
+    })
+    if (viaGit.status !== 0) {
+      console.log(`! ${library} via git failed, retrying with the library index`)
+      run(CLI, ['lib', 'install', library])
     }
   }
   run(CLI, ['core', 'list'])
