@@ -10,7 +10,7 @@
  *   node tools/setup-toolchain.mjs --core 3.3.4
  */
 
-import { createWriteStream } from 'node:fs'
+import { createWriteStream, statSync } from 'node:fs'
 import { chmodSync, mkdirSync, existsSync, rmSync, accessSync, constants } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
@@ -118,16 +118,141 @@ async function ensureCli() {
   console.log(`✓ arduino-cli ${CLI_VERSION}`)
 }
 
+/**
+ * Pick the archive for this host from a tool's system list.
+ * @param {any[]} systems - index entries for one tool version.
+ * @returns {any | undefined} the matching system entry.
+ */
+function pickSystem(systems) {
+  const os = process.platform
+  const arch = process.arch
+  const wanted =
+    os === 'darwin'
+      ? [arch === 'arm64' ? 'arm64-apple-darwin' : 'x86_64-apple-darwin', 'apple-darwin']
+      : os === 'win32'
+        ? [arch === 'arm64' ? 'aarch64-mingw32' : 'x86_64-mingw32', 'mingw32']
+        : [arch === 'arm64' ? 'aarch64-linux-gnu' : 'x86_64-pc-linux-gnu', 'linux']
+  for (const needle of wanted) {
+    const hit = systems.find((entry) => entry.host.includes(needle))
+    if (hit !== undefined) return hit
+  }
+  return systems[0]
+}
+
+/**
+ * Pre-download every archive with curl so a flaky link resumes instead of
+ * failing the whole `core install` (arduino-cli itself cannot resume).
+ * @returns {Promise<boolean>} whether the cache is complete.
+ */
+async function prefetchArchives(coreVersion) {
+  const curl = spawnSync('curl', ['--version'], { encoding: 'utf8' })
+  if (curl.status !== 0) {
+    console.log('… curl not available, letting arduino-cli download directly')
+    return false
+  }
+
+  console.log(`… reading ${ESP32_INDEX}`)
+  const index = await fetchJson(ESP32_INDEX)
+  const pkg = index.packages.find((entry) => entry.name === 'esp32')
+  const platform = pkg?.platforms.find((entry) => entry.version === coreVersion)
+  if (platform === undefined) {
+    console.log(`… esp32 ${coreVersion} not in the index yet, skipping prefetch`)
+    return false
+  }
+
+  const targets = [{ url: platform.url, file: platform.archiveFileName, size: platform.size }]
+  for (const dep of platform.toolsDependencies) {
+    const tool = pkg.tools.find((entry) => entry.name === dep.name && entry.version === dep.version)
+    if (tool === undefined) continue
+    const system = pickSystem(tool.systems)
+    if (system === undefined) continue
+    targets.push({ url: system.url, file: system.archiveFileName, size: system.size })
+  }
+
+  const dir = join(TOOLS, 'dl', 'packages')
+  mkdirSync(dir, { recursive: true })
+  let ok = true
+  for (const target of targets) {
+    const path = join(dir, target.file)
+    if (existsSync(path) && statSize(path) === target.size) {
+      console.log(`✓ cached ${target.file}`)
+      continue
+    }
+    console.log(`↓ ${target.file} (${(target.size / 1e6).toFixed(0)} MB, resumable)`)
+    const result = spawnSync(
+      'curl',
+      ['-fL', '--retry', '20', '--retry-delay', '5', '--retry-all-errors', '-C', '-', '-o', path, target.url],
+      { stdio: 'inherit' },
+    )
+    if (result.status !== 0 || statSize(path) !== target.size) {
+      console.log(`! ${target.file} still incomplete — re-run the setup to resume`)
+      ok = false
+    }
+  }
+  return ok
+}
+
+/**
+ * @param {string} path - file to measure.
+ * @returns {number} size in bytes, or -1.
+ */
+function statSize(path) {
+  try {
+    return statSync(path).size
+  } catch {
+    return -1
+  }
+}
+
+/**
+ * Fetch and parse a JSON document with retries.
+ * @param {string} url - document URL.
+ * @returns {Promise<any>} parsed body.
+ */
+async function fetchJson(url) {
+  let last
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      const response = await fetch(url, { redirect: 'follow' })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return await response.json()
+    } catch (error) {
+      last = error
+      console.log(`… index fetch failed (${error.message}), retry ${attempt}/5`)
+      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
+    }
+  }
+  throw last
+}
+
 /** Install the ESP32 core and the sketch libraries. */
-function installPackages() {
+async function installPackages() {
+  const coreVersion = args.core ?? DEFAULT_CORE
   run(CLI, ['core', 'update-index', '--additional-urls', ESP32_INDEX])
-  const core = `esp32:esp32@${args.core ?? DEFAULT_CORE}`
-  run(CLI, ['core', 'install', core, '--additional-urls', ESP32_INDEX])
-  run(CLI, ['lib', 'install', ...LIBRARIES])
+  await prefetchArchives(coreVersion)
+  run(CLI, ['core', 'install', `esp32:esp32@${coreVersion}`, '--additional-urls', ESP32_INDEX])
+  for (const library of LIBRARIES) {
+    const result = spawnSync(CLI, ['lib', 'install', library], { stdio: 'inherit', env: { ...process.env, ...cliEnv() } })
+    if (result.status !== 0) {
+      console.log(`! ${library} failed via the library index, retrying with git`)
+      run(CLI, ['lib', 'install', '--git-url', `https://github.com/${gitPath(library)}.git`])
+    }
+  }
   run(CLI, ['core', 'list'])
   run(CLI, ['lib', 'list'])
 }
 
+/**
+ * Repository that hosts one of the sketch libraries.
+ * @param {string} library - library name.
+ * @returns {string} `owner/name`.
+ */
+function gitPath(library) {
+  if (library === 'M5Unified') return 'm5stack/M5Unified'
+  if (library === 'M5GFX') return 'm5stack/M5GFX'
+  return 'bblanchon/ArduinoJson'
+}
+
 await ensureCli()
-installPackages()
+await installPackages()
 console.log('\n✓ toolchain ready. Next: node tools/configure.mjs --ssid ... --password ...')
