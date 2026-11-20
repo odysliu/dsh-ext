@@ -10,13 +10,15 @@ import { VoiceBridge, wrapWav } from '../src/voice.js'
 function setup(options = {}) {
   const sent = []
   const followed = []
-  const ctx = {
-    speechToText: options.speech ?? {
+  const speechService = options.speech ?? {
       snapshot: () => ({ providers: [{ id: 'sense', preparation: { phase: 'ready' } }], selection: { providerId: 'sense', language: 'zh' } }),
       resolve: (request) => ({ ...request, provider: { info: { id: 'sense' } } }),
       transcribe: async () => ({ text: '把刚才那个改一下', audioSeconds: 1, inferenceSeconds: 0.2 }),
       prepare: () => {},
-    },
+  }
+  const ctx = {
+    speechToText: speechService,
+    get: (name) => (name === 'speechToText' ? speechService : undefined),
     agents: {
       get: (id) => (id === 'session-1' ? { id, followup: (message) => followed.push(message) } : undefined),
       list: () => [{ id: 'session-1', followup: (message) => followed.push(message) }],
@@ -92,12 +94,14 @@ test('without a speech service the watch gets an explanation', async () => {
 
 test('an unprepared provider explains the download instead of failing silently', async () => {
   const sent = []
+  const unprepared = {
+    snapshot: () => ({ providers: [{ id: 'sense', preparation: { phase: 'unprepared' } }], selection: { providerId: 'sense', language: 'zh' } }),
+    prepare: () => {},
+  }
   const bridge = new VoiceBridge({
     ctx: {
-      speechToText: {
-        snapshot: () => ({ providers: [{ id: 'sense', preparation: { phase: 'unprepared' } }], selection: { providerId: 'sense', language: 'zh' } }),
-        prepare: () => {},
-      },
+      speechToText: unprepared,
+      get: (name) => (name === 'speechToText' ? unprepared : undefined),
     },
     send: (message) => sent.push(message),
     logger: { warn() {} },

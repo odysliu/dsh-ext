@@ -8,7 +8,10 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <WiFiServer.h>
 #include <Preferences.h>
+
+#include "config.h"
 
 struct PromptView {
   char id[24] = {0};
@@ -59,6 +62,8 @@ class Link {
 
  private:
   void connectWifi();
+  void sendHello();
+  void adoptClient();
   bool discoverHost(uint32_t timeoutMs);
   bool connectHost();
   void readSocket();
@@ -71,12 +76,14 @@ class Link {
 
   LinkListener *listener_ = nullptr;
   WiFiClient client_;
+  WiFiServer server_{STOPWATCH_HOST_PORT};
   WiFiUDP udp_;
   Preferences prefs_;
 
   bool configured_ = false;
   bool wifiUp_ = false;
   bool connected_ = false;
+  bool serverStarted_ = false;
 
   char host_[40] = {0};
   uint16_t port_ = 0;

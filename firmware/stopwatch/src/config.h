@@ -31,9 +31,29 @@
 #define STOPWATCH_HOST_TOKEN ""
 #endif
 
+/** 1 = the watch listens and the host dials in (works when the AP blocks device→host TCP). */
+#ifndef STOPWATCH_DEVICE_SERVER
+#define STOPWATCH_DEVICE_SERVER 1
+#endif
+
+/** Optional fixed host address; empty means "discover over UDP". */
+#ifndef STOPWATCH_HOST_IP
+#define STOPWATCH_HOST_IP ""
+#endif
+
+/** Optional host MAC; pins a static ARP entry when the router proxy-ARPs the host. */
+#ifndef STOPWATCH_HOST_MAC
+#define STOPWATCH_HOST_MAC ""
+#endif
+
 /** Swap the two side buttons: 0 = right is BtnB (GPIO1), 1 = right is BtnA (GPIO2). */
 #ifndef STOPWATCH_SWAP_BUTTONS
 #define STOPWATCH_SWAP_BUTTONS 0
+#endif
+
+/** Print boot / link diagnostics on the USB serial port. */
+#ifndef STOPWATCH_DEBUG
+#define STOPWATCH_DEBUG 1
 #endif
 
 #define STOPWATCH_FW_VERSION "0.2.0"

@@ -1,6 +1,7 @@
 #include "link.h"
 
 #include <ArduinoJson.h>
+#include "lwip/etharp.h"
 #include <M5Unified.h>
 
 #include "config.h"
@@ -18,11 +19,51 @@ const char *kNamespace = "dsh-stopwatch";
 
 void Link::begin(LinkListener *listener) {
   listener_ = listener;
+#if STOPWATCH_DEBUG
+  Serial.begin(115200);
+  Serial.printf("\n[dsh] boot fw=%s id=%s\n", STOPWATCH_FW_VERSION, STOPWATCH_DEVICE_ID);
+#endif
   bootMs_ = millis();
   prefs_.begin(kNamespace, false);
   loadHost();
+  if (strlen(STOPWATCH_HOST_IP) > 0 && strlen(STOPWATCH_HOST_MAC) > 0) {
+    // routers that proxy-ARP across bands hand out their own MAC; pin the real one
+    ip4_addr_t ip;
+    struct eth_addr mac;
+    if (ip4addr_aton(STOPWATCH_HOST_IP, &ip) && sscanf(STOPWATCH_HOST_MAC, "%2hhx:%2hhx:%2hhx:%2hhx:%2hhx:%2hhx",
+                                                        &mac.addr[0], &mac.addr[1], &mac.addr[2], &mac.addr[3],
+                                                        &mac.addr[4], &mac.addr[5]) == 6) {
+      etharp_add_static_entry(&ip, &mac);
+#if STOPWATCH_DEBUG
+      Serial.printf("[dsh] static arp %s -> %s\n", STOPWATCH_HOST_IP, STOPWATCH_HOST_MAC);
+#endif
+    }
+  }
+  if (strlen(STOPWATCH_HOST_IP) > 0) {  // a pinned host always wins over NVS
+    strlcpy(host_, STOPWATCH_HOST_IP, sizeof(host_));
+    port_ = STOPWATCH_HOST_PORT;
+#if STOPWATCH_DEBUG
+    Serial.printf("[dsh] fixed host %s:%u\n", host_, port_);
+#endif
+  }
 
   configured_ = strlen(STOPWATCH_WIFI_SSID) > 0;
+#if STOPWATCH_DEBUG
+  Serial.printf("[dsh] wifi ssid=%s configured=%d\n", STOPWATCH_WIFI_SSID, configured_ ? 1 : 0);
+#endif
+#if STOPWATCH_DEBUG
+  if (!configured_) {
+    // no credentials yet: list what the 2.4 GHz radio can actually see
+    WiFi.mode(WIFI_STA);
+    const int found = WiFi.scanNetworks();
+    Serial.printf("[dsh] scan found %d networks\n", found);
+    for (int i = 0; i < found; i++) {
+      Serial.printf("[dsh]   ssid=%s ch=%d rssi=%d enc=%d\n", WiFi.SSID(i).c_str(), WiFi.channel(i),
+                    WiFi.RSSI(i), static_cast<int>(WiFi.encryptionType(i)));
+    }
+    WiFi.scanDelete();
+  }
+#endif
   if (!configured_) return;
 
   WiFi.mode(WIFI_STA);
@@ -31,14 +72,44 @@ void Link::begin(LinkListener *listener) {
   WiFi.setHostname(STOPWATCH_DEVICE_ID);
   connectWifi();
   readBattery();
+#if STOPWATCH_DEVICE_SERVER
+  if (wifiUp_) {
+    server_.begin(STOPWATCH_HOST_PORT);
+    serverStarted_ = true;
+    server_.setNoDelay(true);
+#if STOPWATCH_DEBUG
+    Serial.printf("[dsh] listening on tcp/%u\n", STOPWATCH_HOST_PORT);
+#endif
+  }
+#endif
 }
 
 void Link::loop() {
+#if STOPWATCH_DEBUG
+  {
+    static uint32_t lastBeat = 0;
+    if (millis() - lastBeat > 4000) {
+      lastBeat = millis();
+      Serial.printf("[dsh] alive wifi=%d ip=%s srv=%d tcp=%d host=%s\n", wifiUp_ ? 1 : 0,
+                    wifiUp_ ? WiFi.localIP().toString().c_str() : "-", serverStarted_ ? 1 : 0, connected_ ? 1 : 0,
+                    host_[0] != 0 ? host_ : "-");
+    }
+  }
+#endif
   if (!configured_) return;
 
   const bool up = WiFi.status() == WL_CONNECTED;
   if (up != wifiUp_) {
     wifiUp_ = up;
+#if STOPWATCH_DEVICE_SERVER
+    if (up && !serverStarted_) {
+      server_.begin(STOPWATCH_HOST_PORT);  // begin() defaults to port 80
+      serverStarted_ = true;
+#if STOPWATCH_DEBUG
+      Serial.printf("[dsh] listening on tcp/%u\n", STOPWATCH_HOST_PORT);
+#endif
+    }
+#endif
     if (!up) {
       connected_ = false;
       client_.stop();
@@ -57,7 +128,28 @@ void Link::loop() {
     return;
   }
 
+#if STOPWATCH_DEVICE_SERVER
   if (!connected_) {
+    if (!client_.connected()) {
+      WiFiClient incoming = server_.accept();
+      if (incoming) {
+        client_ = incoming;
+        adoptClient();
+      }
+      return;
+    }
+    readSocket();
+    if (!connected_ && millis() - lastConnectAttempt_ > 5000) client_.stop();
+    return;
+  }
+#else
+  if (!connected_) {
+    // once the socket is up, read the welcome before ever reconnecting again
+    if (client_.connected()) {
+      readSocket();
+      if (!connected_ && millis() - lastConnectAttempt_ > 5000) client_.stop();
+      return;
+    }
     if (millis() - lastConnectAttempt_ < CONNECT_RETRY_MS) return;
     lastConnectAttempt_ = millis();
     if (host_[0] == 0 && !discoverHost(DISCOVERY_TIMEOUT_MS)) return;
@@ -67,6 +159,7 @@ void Link::loop() {
     }
     return;
   }
+#endif
 
   if (!client_.connected()) {
     connected_ = false;
@@ -98,6 +191,11 @@ void Link::connectWifi() {
   }
   wifiUp_ = WiFi.status() == WL_CONNECTED;
   if (wifiUp_) rssi_ = static_cast<int8_t>(WiFi.RSSI());
+#if STOPWATCH_DEBUG
+  Serial.printf("[dsh] wifi %s", wifiUp_ ? "connected" : "failed");
+  if (wifiUp_) Serial.printf(" ip=%s rssi=%d", WiFi.localIP().toString().c_str(), rssi_);
+  Serial.println();
+#endif
 }
 
 void Link::loadHost() {
@@ -114,7 +212,15 @@ void Link::saveHost() {
 
 bool Link::discoverHost(uint32_t timeoutMs) {
   udp_.begin(0);
-  const IPAddress broadcast(255, 255, 255, 255);
+  // limited broadcast is dropped by some APs; also try the subnet broadcast
+  const IPAddress local = WiFi.localIP();
+  const IPAddress mask = WiFi.subnetMask();
+  const IPAddress subnet(local[0] | (~mask[0] & 0xFF), local[1] | (~mask[1] & 0xFF), local[2] | (~mask[2] & 0xFF),
+                         local[3] | (~mask[3] & 0xFF));
+#if STOPWATCH_DEBUG
+  Serial.printf("[dsh] discover via %s and 255.255.255.255\n", subnet.toString().c_str());
+#endif
+  const IPAddress broadcast = subnet;
   udp_.beginPacket(broadcast, STOPWATCH_DISCOVERY_PORT);
   static const char kDiscover[] = "{\"t\":\"discover\",\"proto\":1}";
   udp_.write(reinterpret_cast<const uint8_t*>(kDiscover), strlen(kDiscover));
@@ -145,6 +251,9 @@ bool Link::discoverHost(uint32_t timeoutMs) {
             strlcpy(hostName_, name, sizeof(hostName_));
             saveHost();
             udp_.stop();
+#if STOPWATCH_DEBUG
+            Serial.printf("[dsh] discovered host %s:%u\n", host_, port_);
+#endif
             return true;
           }
         }
@@ -161,6 +270,16 @@ bool Link::connectHost() {
   client_.setNoDelay(true);
   if (!client_.connect(host_, port_, CONNECT_TIMEOUT_MS)) return false;
 
+  sendHello();
+  lastBeat_ = millis();
+  lastStatus_ = millis();
+#if STOPWATCH_DEBUG
+  Serial.printf("[dsh] tcp connected %s:%u\n", host_, port_);
+#endif
+  return true;
+}
+
+void Link::sendHello() {
   JsonDocument doc;
   doc["t"] = "hello";
   doc["proto"] = 1;
@@ -171,12 +290,21 @@ bool Link::connectHost() {
   doc["battery"] = battery_;
   char payload[320];
   size_t length = serializeJson(doc, payload, sizeof(payload));
-  client_.write(reinterpret_cast<const uint8_t *>(payload), length);
+  const size_t written = client_.write(reinterpret_cast<const uint8_t *>(payload), length);
   client_.write('\n');
+#if STOPWATCH_DEBUG
+  Serial.printf("[dsh] hello %u/%u bytes: %s\n", static_cast<unsigned>(written), static_cast<unsigned>(length), payload);
+#endif
+}
 
+void Link::adoptClient() {
+  client_.setNoDelay(true);
   lastBeat_ = millis();
-  lastStatus_ = millis();
-  return true;
+  lastConnectAttempt_ = millis();  // the welcome timeout counts from accept
+#if STOPWATCH_DEBUG
+  Serial.printf("[dsh] host dialed in from %s\n", client_.remoteIP().toString().c_str());
+#endif
+  sendHello();
 }
 
 void Link::readSocket() {
@@ -199,6 +327,9 @@ void Link::readSocket() {
 }
 
 void Link::handleLine(char *line) {
+#if STOPWATCH_DEBUG
+  Serial.printf("[dsh] <- %s\n", line);
+#endif
   JsonDocument doc;
   if (deserializeJson(doc, line)) return;
   lastBeat_ = millis();
@@ -206,6 +337,9 @@ void Link::handleLine(char *line) {
   const char *type = doc["t"] | "";
   if (!strcmp(type, "welcome")) {
     connected_ = true;
+#if STOPWATCH_DEBUG
+    Serial.println("[dsh] paired, waiting for prompts");
+#endif
     const char *host = doc["host"] | "";
     if (host[0] != 0) strlcpy(hostName_, host, sizeof(hostName_));
     listener_->onLinkConnected();

@@ -4,6 +4,7 @@
  */
 
 import { DeviceServer } from './server.js'
+import { DeviceConnector } from './connector.js'
 import { Discovery } from './discovery.js'
 import { ApprovalQueue } from './queue.js'
 import { PreviewCache, summarizeToolCall } from './preview.js'
@@ -26,12 +27,10 @@ export class Bridge {
       logger: this.logger,
       alert: { sound: config.sound, vibration: config.vibration },
     })
-    this.server = new DeviceServer({
-      port: config.port,
-      host: config.host,
-      token: config.token,
-      logger: this.logger,
-    })
+    this.server =
+      config.transport === 'dial'
+        ? new DeviceConnector({ host: config.deviceHost, port: config.port, token: config.token, logger: this.logger })
+        : new DeviceServer({ port: config.port, host: config.host, token: config.token, logger: this.logger })
     this.discovery = new Discovery({
       port: config.discoveryPort,
       tcpPort: config.port,
@@ -69,7 +68,7 @@ export class Bridge {
     this.server.listen().catch((error) => {
       this.logger?.warn?.(`stopwatch-bridge: cannot listen on tcp/${this.config.port}: ${error.message}`)
     })
-    this.discovery.start()
+    if (this.config.transport === 'listen') this.discovery.start()
 
     this.disposers.push(
       this.ctx.on('approval/request', (request, next) => this.onApproval(request, next), { prepend: true }),
@@ -84,7 +83,8 @@ export class Bridge {
     if (this.config.voice) this.voice.warmup()
 
     this.logger?.info?.(
-      `stopwatch-bridge: ${this.config.mode === 'remote' ? 'watch-first' : 'notify-only'} mode, ` +
+      `stopwatch-bridge: ${this.config.transport === 'dial' ? `dialing ${this.config.deviceHost}` : `listening on ${this.config.port}`}; ` +
+        `${this.config.mode === 'remote' ? 'watch-first' : 'notify-only'} mode, ` +
         `timeout ${Math.round(this.config.timeoutMs / 1000)}s`,
     )
   }

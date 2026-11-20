@@ -12,6 +12,10 @@ export const DEFAULT_CONFIG = Object.freeze({
   discoveryPort: 47778,
   /** Interface to bind; `0.0.0.0` accepts the watch from the LAN. */
   host: '0.0.0.0',
+  /** `listen` waits for the watch; `dial` connects out to it (APs that block device→host TCP). */
+  transport: 'listen',
+  /** Watch address for `dial`; the watch listens on `port`. */
+  deviceHost: '',
   /** Shared secret; empty disables the check (trusted LAN). */
   token: '',
   /** `remote` lets the watch decide; `notify` only mirrors the prompt. */
@@ -72,6 +76,14 @@ export function normalizeConfig(raw) {
   cfg.mode = text('mode', cfg.mode)
   if (!MODES.has(cfg.mode)) {
     throw new Error(`stopwatch-bridge: mode must be one of ${[...MODES].join(', ')}`)
+  }
+  cfg.transport = text('transport', cfg.transport)
+  if (cfg.transport !== 'listen' && cfg.transport !== 'dial') {
+    throw new Error('stopwatch-bridge: transport must be "listen" or "dial"')
+  }
+  cfg.deviceHost = text('deviceHost', cfg.deviceHost)
+  if (cfg.transport === 'dial' && cfg.deviceHost === '') {
+    throw new Error('stopwatch-bridge: transport "dial" needs deviceHost')
   }
   cfg.timeoutMs = integer('timeoutMs', cfg.timeoutMs, 5000, 600000)
   cfg.maxWidthPx = integer('maxWidthPx', cfg.maxWidthPx, 120, 460)

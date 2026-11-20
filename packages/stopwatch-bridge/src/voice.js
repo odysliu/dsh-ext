@@ -213,8 +213,13 @@ export class VoiceBridge {
 
   /** @returns {any | null} the speech service when the Host composes one. */
   speech() {
-    const service = this.ctx?.speechToText ?? this.ctx?.get?.('speechToText')
-    return service ?? null
+    // optional service: read it through ctx.get(), never as a property, so the
+    // plugin does not need to declare an inject for it
+    try {
+      return this.ctx?.get?.('speechToText') ?? null
+    } catch {
+      return null
+    }
   }
 
   /**
