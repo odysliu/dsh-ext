@@ -33,6 +33,9 @@ class Character {
 
   static int width();
 
+  /** Dump the current frame as hex over serial (debug screenshots). */
+  void dump();
+
  private:
   static constexpr int kMaxFrames = 3;
   M5Canvas* frames_[kMaxFrames] = {nullptr, nullptr, nullptr};

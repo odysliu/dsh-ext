@@ -17,6 +17,9 @@ class UI : public LinkListener {
   void begin(Link* link);
   void loop();
 
+  /** Print the current character frame for remote inspection. */
+  void dumpFrame();
+
   void onLinkConnected() override;
   void onLinkDisconnected() override;
   void onLinkPrompt(const PromptView& prompt) override;

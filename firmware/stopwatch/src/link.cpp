@@ -20,7 +20,7 @@ const char *kNamespace = "dsh-stopwatch";
 void Link::begin(LinkListener *listener) {
   listener_ = listener;
 #if STOPWATCH_DEBUG
-  Serial.begin(115200);
+  Serial.begin(921600);
   Serial.printf("\n[dsh] boot fw=%s id=%s\n", STOPWATCH_FW_VERSION, STOPWATCH_DEVICE_ID);
 #endif
   bootMs_ = millis();

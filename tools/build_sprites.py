@@ -91,7 +91,7 @@ def fit_common(images: list[Image.Image], size: int = SIZE) -> list[Image.Image]
 
     out = []
     for img in images:
-        art = img.crop((left, top, right, bottom)).resize(target, Image.LANCZOS)
+        art = img.crop((left, top, right, bottom)).resize(target, Image.BOX)  # no ringing halos
         canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         canvas.alpha_composite(art, offset)
         out.append(canvas)
@@ -112,7 +112,7 @@ def quantize(img: Image.Image) -> tuple[Image.Image, list[tuple[int, int, int]]]
     alpha = img.getchannel("A").tobytes()
     data = bytearray(len(indices))
     for i, value in enumerate(indices):
-        data[i] = (value + 1) if alpha[i] >= 128 else 0
+        data[i] = min(255, value + 1) if alpha[i] >= 128 else 0
     indexed = Image.frombytes("P", img.size, bytes(data))
     indexed.putpalette([0, 0, 0] + palette + [0] * (768 - 3 - len(palette)))
     return indexed, colors
@@ -136,7 +136,7 @@ def remap(img: Image.Image, palette_img: Image.Image) -> Image.Image:
     alpha = img.getchannel("A").tobytes()
     data = bytearray(len(indices))
     for i, value in enumerate(indices):
-        data[i] = (value + 1) if alpha[i] >= 128 else 0
+        data[i] = min(255, value + 1) if alpha[i] >= 128 else 0
     indexed = Image.frombytes("P", img.size, bytes(data))
     indexed.putpalette(palette_img.getpalette())
     return indexed
@@ -214,16 +214,16 @@ def main() -> None:
         raw = []
         for path in paths:
             img = Image.open(path)
-            img.thumbnail((1200, 1200), Image.LANCZOS)
+            img.thumbnail((1200, 1200), Image.BOX)
             raw.append(drop_background(img))
         fitted_frames = fit_common(raw)
         # one palette for the whole state, otherwise colours flicker between frames
         indexed, colors = quantize(fitted_frames[0])
         palette_img = Image.new("P", (1, 1))
         palette_img.putpalette([0, 0, 0] + quantize_palette(fitted_frames[0]))
-        frames = [despeckle(indexed)]
+        frames = [indexed]
         for fitted in fitted_frames[1:]:
-            frames.append(despeckle(remap(fitted, palette_img)))
+            frames.append(remap(fitted, palette_img))
         sprites[state] = (frames, colors)
 
     OUT_HEADER.parent.mkdir(parents=True, exist_ok=True)

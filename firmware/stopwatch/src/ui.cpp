@@ -102,6 +102,8 @@ void UI::loop() {
   }
 }
 
+void UI::dumpFrame() { character_.dump(); }
+
 void UI::pulseBrightness(uint32_t now) {
   const bool alerting = state_ == kAlert;
   const uint8_t target =
@@ -203,30 +205,25 @@ void UI::renderIdle() {
 }
 
 void UI::drawStatusLine() {
-  const bool connected = link_ != nullptr && link_->connected();
-  const int y = 352;
   if (state_ == kAlert) {
-    const char* label = "有确认请求";
-    text::drawCentered(M5.Display, kCx, y, label, kText, kBg);
-    text::drawCentered(M5.Display, kCx, y + 36, "点一下屏幕", kAccent, kBg);
-  } else if (connected) {
-    text::drawCentered(M5.Display, kCx, y, "已连接", kMuted, kBg);
-  } else {
-    text::drawCentered(M5.Display, kCx, y, "未连接", kMuted, kBg);
+    text::drawCentered(M5.Display, kCx, 356, "有确认请求", kText, kBg);
+    text::drawCentered(M5.Display, kCx, 390, "点一下屏幕", kAccent, kBg);
+    return;
   }
 
-  if (state_ == kAlert) return;  // the alert screen keeps one clear line
-
-  // one compact line at the bottom edge; the character owns the centre
-  char footer[48];
+  const bool connected = link_ != nullptr && link_->connected();
   const int battery = link_ != nullptr ? link_->battery() : -1;
-  if (battery >= 0) {
+  char footer[48];
+  if (!connected) {
+    strlcpy(footer, "未连接", sizeof(footer));
+  } else if (battery >= 0) {
     snprintf(footer, sizeof(footer), "已连接 %d%%", battery);
   } else {
     strlcpy(footer, "已连接", sizeof(footer));
   }
   text::drawCentered(M5.Display, kCx, 408, footer, kMuted, kBg);
 }
+
 
 void UI::drawButton(int x, int y, int w, int h, const char* label, uint16_t fill, uint16_t textColor,
                     bool outline) {
