@@ -32,20 +32,47 @@ export class VoiceBridge {
    * press of the right button does not have to wait for a 300 MB download.
    */
   warmup() {
-    const speech = this.speech()
-    if (speech === null) return
-    try {
-      const snapshot = speech.snapshot()
-      const selected = snapshot.providers.find((provider) => provider.id === snapshot.selection.providerId)
-      if (selected === undefined) return
-      if (selected.preparation.phase === 'unprepared') {
-        this.logger?.info?.(
-          'stopwatch-bridge: preparing the local speech model (first run downloads ~300 MB)',
-        )
-        speech.prepare(selected.id)
+    // The speech service can mount after this plugin, so keep retrying for a
+    // while instead of giving up on the first attempt.
+    let attempts = 0
+    const attempt = () => {
+      attempts += 1
+      const speech = this.speech()
+      if (speech === null) {
+        if (attempts < 30 && !this.disposed) setTimeout(attempt, 20000).unref?.()
+        return
       }
-    } catch (error) {
-      this.logger?.warn?.(`stopwatch-bridge: speech warmup failed: ${error.message}`)
+      try {
+        const snapshot = speech.snapshot()
+        const selected = snapshot.providers.find((provider) => provider.id === snapshot.selection.providerId)
+        if (selected === undefined) return
+        const phase = selected.preparation.phase
+        if (phase === 'unprepared') {
+          this.logger?.info?.('stopwatch-bridge: preparing the local speech model (first run ~300 MB)')
+          speech.prepare(selected.id)
+          if (attempts < 30 && !this.disposed) setTimeout(attempt, 20000).unref?.()
+          return
+        }
+        if (phase === 'downloading' || phase === 'checking' || phase === 'loading') {
+          if (attempts < 30 && !this.disposed) setTimeout(attempt, 20000).unref?.()
+        }
+      } catch (error) {
+        this.logger?.warn?.(`stopwatch-bridge: speech warmup failed: ${error.message}`)
+      }
+    }
+    attempt()
+  }
+
+  /**
+   * Kick preparation when a recording arrives before the model is ready.
+   * @param {any} speech - speech service.
+   * @param {any} view - selected provider view.
+   */
+  nudgePreparation(speech, view) {
+    try {
+      if (view?.preparation?.phase === 'unprepared') speech.prepare(view.id)
+    } catch {
+      /* preparation is best effort */
     }
   }
 
@@ -150,7 +177,10 @@ export class VoiceBridge {
 
     const view = this.preparedView(speech)
     if (view === null) {
-      this.status(id, 'error', '识别模型未就绪，请先在设置里启用语音输入')
+      const snapshot = this.speech()?.snapshot?.()
+      const selected = snapshot?.providers?.find((provider) => provider.id === snapshot?.selection?.providerId)
+      this.nudgePreparation(speech, selected)
+      this.status(id, 'error', '语音模型准备中，请稍后再试')
       return
     }
 
