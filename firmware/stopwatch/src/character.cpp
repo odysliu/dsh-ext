@@ -52,18 +52,21 @@ void Character::setMood(Mood mood) {
   direction_ = 1;
   lastFrame_ = millis();
 
-  uint16_t row[CHAR_W];
+  // Decode with fillRect runs rather than pushImage(uint16_t*): the latter takes
+  // a byte-swap path on sprites and produced wrong colours on the panel.
   for (int frame = 0; frame < count_; frame++) {
     M5Canvas& canvas = *frames_[frame];
     canvas.fillScreen(background_);
     const uint8_t* pixels = set.frames[frame];
     for (int y = 0; y < CHAR_H; y++) {
       const uint8_t* line = pixels + static_cast<size_t>(y) * CHAR_W;
-      for (int x = 0; x < CHAR_W; x++) {
+      int x = 0;
+      while (x < CHAR_W) {
         const uint8_t index = line[x];
-        row[x] = index == 0 ? background_ : set.palette[index];
+        const int start = x;
+        while (x < CHAR_W && line[x] == index) x++;
+        if (index != 0) canvas.fillRect(start, y, x - start, 1, set.palette[index]);
       }
-      canvas.pushImage(0, y, CHAR_W, 1, row);
     }
   }
 }
