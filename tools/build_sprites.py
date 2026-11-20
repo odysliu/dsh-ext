@@ -118,11 +118,21 @@ def quantize(img: Image.Image) -> tuple[Image.Image, list[tuple[int, int, int]]]
     return indexed, colors
 
 
-def quantize_palette(img: Image.Image) -> list[int]:
-    """The RGB palette the quantiser would pick for this frame."""
-    rgb = Image.new("RGB", img.size, (9, 11, 22))
-    rgb.paste(img, (0, 0), img)
-    return rgb.quantize(colors=COLORS, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).getpalette()[
+def quantize_palette(images: list[Image.Image]) -> list[int]:
+    """The RGB palette the quantiser would pick for the whole animation.
+
+    Building it from every frame matters: mapping later frames onto the first
+    frame's palette turned thin dark lines into isolated white pixels.
+    """
+    planes = []
+    for img in images:
+        rgb = Image.new("RGB", img.size, (9, 11, 22))
+        rgb.paste(img, (0, 0), img)
+        planes.append(rgb)
+    stack = Image.new("RGB", (planes[0].width, planes[0].height * len(planes)))
+    for index, plane in enumerate(planes):
+        stack.paste(plane, (0, index * plane.height))
+    return stack.quantize(colors=COLORS, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).getpalette()[
         : COLORS * 3
     ]
 
@@ -217,13 +227,13 @@ def main() -> None:
             img.thumbnail((1200, 1200), Image.BOX)
             raw.append(drop_background(img))
         fitted_frames = fit_common(raw)
-        # one palette for the whole state, otherwise colours flicker between frames
-        indexed, colors = quantize(fitted_frames[0])
+        # one palette for every frame of the state, and the header must declare
+        # that same palette - mixing per-frame palettes produced red streaks
+        palette_rgb = quantize_palette(fitted_frames)
         palette_img = Image.new("P", (1, 1))
-        palette_img.putpalette([0, 0, 0] + quantize_palette(fitted_frames[0]))
-        frames = [indexed]
-        for fitted in fitted_frames[1:]:
-            frames.append(remap(fitted, palette_img))
+        palette_img.putpalette(palette_rgb)
+        colors = [tuple(palette_rgb[i * 3 : i * 3 + 3]) for i in range(COLORS)]
+        frames = [remap(fitted, palette_img) for fitted in fitted_frames]
         sprites[state] = (frames, colors)
 
     OUT_HEADER.parent.mkdir(parents=True, exist_ok=True)
