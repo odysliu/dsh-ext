@@ -31,7 +31,12 @@
 #define STOPWATCH_HOST_TOKEN ""
 #endif
 
-#define STOPWATCH_FW_VERSION "0.1.0"
+/** Swap the two side buttons: 0 = right is BtnB (GPIO1), 1 = right is BtnA (GPIO2). */
+#ifndef STOPWATCH_SWAP_BUTTONS
+#define STOPWATCH_SWAP_BUTTONS 0
+#endif
+
+#define STOPWATCH_FW_VERSION "0.2.0"
 #define STOPWATCH_DEVICE_ID "stopwatch-01"
 #define STOPWATCH_DEVICE_NAME "M5StopWatch"
 

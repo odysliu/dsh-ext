@@ -257,6 +257,14 @@ void Link::handleLine(char *line) {
     listener_->onLinkNotice(doc["kind"] | "info", doc["text"] | "", line0);
     return;
   }
+  if (!strcmp(type, "voice_text")) {
+    listener_->onLinkVoiceText(doc["id"] | "", doc["text"] | "", doc["audioMs"] | 0);
+    return;
+  }
+  if (!strcmp(type, "voice_status")) {
+    listener_->onLinkVoiceStatus(doc["id"] | "", doc["state"] | "", doc["message"] | "");
+    return;
+  }
   if (!strcmp(type, "queue")) {
     pending_ = doc["pending"] | 0;
     listener_->onLinkQueue(pending_);
@@ -292,6 +300,77 @@ void Link::sendDecision(const char *id, const char *value, uint32_t latencyMs) {
   if (!connected_ || !client_.connected()) return;
   client_.write(reinterpret_cast<const uint8_t *>(payload), length);
   client_.write('\n');
+}
+
+namespace {
+const char kBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/** Encode little-endian PCM as base64 for the JSON line. */
+size_t base64Encode(const uint8_t* data, size_t length, char* out, size_t outSize) {
+  size_t written = 0;
+  for (size_t i = 0; i < length; i += 3) {
+    const uint32_t b0 = data[i];
+    const uint32_t b1 = i + 1 < length ? data[i + 1] : 0;
+    const uint32_t b2 = i + 2 < length ? data[i + 2] : 0;
+    const uint32_t triple = (b0 << 16) | (b1 << 8) | b2;
+    if (written + 4 >= outSize) break;
+    out[written++] = kBase64[(triple >> 18) & 0x3F];
+    out[written++] = kBase64[(triple >> 12) & 0x3F];
+    out[written++] = i + 1 < length ? kBase64[(triple >> 6) & 0x3F] : '=';
+    out[written++] = i + 2 < length ? kBase64[triple & 0x3F] : '=';
+  }
+  out[written] = 0;
+  return written;
+}
+}  // namespace
+
+void Link::sendVoiceStart(const char* id) {
+  JsonDocument doc;
+  doc["t"] = "voice_start";
+  doc["id"] = id;
+  doc["rate"] = 16000;
+  doc["format"] = "s16le";
+  char payload[128];
+  serializeJson(doc, payload, sizeof(payload));
+  send(payload);
+}
+
+void Link::sendVoiceChunk(const char* id, uint32_t seq, const int16_t* samples, size_t count) {
+  if (count == 0) return;
+  // 512 samples -> 1024 B -> 1368 base64 chars, well under the 8 KB line cap
+  static char encoded[2048];
+  base64Encode(reinterpret_cast<const uint8_t*>(samples), count * sizeof(int16_t), encoded, sizeof(encoded));
+  static char payload[2304];
+  const int written = snprintf(payload, sizeof(payload), "{\"t\":\"voice_chunk\",\"id\":\"%s\",\"seq\":%u,\"data\":\"%s\"}",
+                               id, static_cast<unsigned>(seq), encoded);
+  if (written > 0 && static_cast<size_t>(written) < sizeof(payload)) send(payload);
+}
+
+void Link::sendVoiceEnd(const char* id) {
+  JsonDocument doc;
+  doc["t"] = "voice_end";
+  doc["id"] = id;
+  char payload[96];
+  serializeJson(doc, payload, sizeof(payload));
+  send(payload);
+}
+
+void Link::sendVoiceSend(const char* id) {
+  JsonDocument doc;
+  doc["t"] = "voice_send";
+  doc["id"] = id;
+  char payload[96];
+  serializeJson(doc, payload, sizeof(payload));
+  send(payload);
+}
+
+void Link::sendVoiceClear(const char* id) {
+  JsonDocument doc;
+  doc["t"] = "voice_clear";
+  doc["id"] = id;
+  char payload[96];
+  serializeJson(doc, payload, sizeof(payload));
+  send(payload);
 }
 
 void Link::sendStatus() {

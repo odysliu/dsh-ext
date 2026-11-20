@@ -16,7 +16,7 @@ UI gUi;
 void setup() {
   auto cfg = M5.config();
   cfg.internal_imu = false;
-  cfg.internal_mic = false;
+  cfg.internal_mic = true;  // voice input needs the ES8311 capture path
   cfg.internal_rtc = false;
   cfg.internal_spk = true;
   M5.begin(cfg);

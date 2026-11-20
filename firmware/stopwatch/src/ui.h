@@ -10,6 +10,7 @@
 #include "character.h"
 #include "config.h"
 #include "link.h"
+#include "mic.h"
 
 class UI : public LinkListener {
  public:
@@ -22,6 +23,8 @@ class UI : public LinkListener {
   void onLinkClose(const char* id, const char* outcome, const char* text) override;
   void onLinkNotice(const char* kind, const char* text, const char* line) override;
   void onLinkQueue(uint8_t pending) override;
+  void onLinkVoiceText(const char* id, const char* text, uint32_t audioMs) override;
+  void onLinkVoiceStatus(const char* id, const char* state, const char* message) override;
 
  private:
   enum State {
@@ -31,6 +34,9 @@ class UI : public LinkListener {
     kPrompt,
     kResult,
     kNotice,
+    kRecord,
+    kTranscribing,
+    kReview,
   };
 
   void render();
@@ -39,6 +45,14 @@ class UI : public LinkListener {
   void renderPrompt();
   void renderResult();
   void renderNotice();
+  void renderRecord();
+  void renderTranscribing();
+  void renderReview();
+  void handleVoiceButtons(uint32_t now);
+  void startRecording(uint32_t now);
+  void finishRecording();
+  void cancelRecording();
+  void captureStep();
   void drawStatusLine();
   void drawButton(int x, int y, int w, int h, const char* label, uint16_t fill, uint16_t textColor, bool outline);
   void drawAttentionRing(int radius, int thickness);
@@ -73,4 +87,12 @@ class UI : public LinkListener {
 
   uint8_t brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
   Character character_;
+  MicCapture mic_;
+  char voiceId_[16] = {0};
+  uint32_t voiceSeq_ = 0;
+  uint32_t recordStartedAt_ = 0;
+  int16_t chunk_[512] = {0};
+  char transcript_[512] = {0};
+  char voiceHint_[64] = {0};
+  bool voiceActive_ = false;
 };

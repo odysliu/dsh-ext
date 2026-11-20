@@ -8,6 +8,7 @@ import { Discovery } from './discovery.js'
 import { ApprovalQueue } from './queue.js'
 import { PreviewCache, summarizeToolCall } from './preview.js'
 import { buildPromptView } from './view.js'
+import { VoiceBridge } from './voice.js'
 
 export class Bridge {
   /**
@@ -37,6 +38,12 @@ export class Bridge {
       name: config.deviceName,
       token: config.token,
       logger: this.logger,
+    })
+    this.voice = new VoiceBridge({
+      ctx,
+      send: (message) => this.server.send(message),
+      logger: this.logger,
+      language: config.language,
     })
     /** @type {Array<() => void>} */
     this.disposers = []
@@ -70,6 +77,9 @@ export class Bridge {
     this.disposers.push(
       this.ctx.on('tools/pre-execute', (execution, next) => this.onPreExecute(execution, next)),
     )
+    this.disposers.push(
+      this.ctx.on('session/event', (session, event) => this.voice.trackSession(session, event)),
+    )
 
     this.logger?.info?.(
       `stopwatch-bridge: ${this.config.mode === 'remote' ? 'watch-first' : 'notify-only'} mode, ` +
@@ -87,6 +97,7 @@ export class Bridge {
         /* already disposed */
       }
     }
+    this.voice.dispose()
     this.queue.stop()
     this.discovery.stop()
     this.server.off?.('device', this.onDevice)
@@ -183,6 +194,7 @@ export class Bridge {
    * @param {any} message - protocol message.
    */
   handleDeviceMessage(message) {
+    if (this.config.voice && this.voice.handle(message)) return
     if (message.t === 'decision') {
       const accepted = this.queue.decide(String(message.id ?? ''), String(message.value ?? ''))
       if (!accepted) {

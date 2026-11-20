@@ -5,6 +5,7 @@
 #include "assets/sounds.h"
 #include "config.h"
 #include "character.h"
+#include "mic.h"
 #include "text.h"
 
 namespace {
@@ -78,6 +79,9 @@ void UI::loop() {
     M5.Power.setVibration(0);
     vibrateUntil_ = 0;
   }
+
+  handleVoiceButtons(now);
+  if (state_ == kRecord) captureStep();
 
   if (state_ == kAlert || state_ == kIdle) pulseBrightness(now);
   if (state_ == kAlert && now - lastAlertAt_ > kAlertRepeatMs && alertCount_ < 4) {
@@ -161,6 +165,15 @@ void UI::render() {
       break;
     case kNotice:
       renderNotice();
+      break;
+    case kRecord:
+      renderRecord();
+      break;
+    case kTranscribing:
+      renderTranscribing();
+      break;
+    case kReview:
+      renderReview();
       break;
   }
 }
@@ -347,6 +360,143 @@ void UI::onLinkNotice(const char* kind, const char* text, const char* line) {
   strlcpy(noticeLine_, line != nullptr ? line : "", sizeof(noticeLine_));
   noticeUntil_ = millis() + 4000;
   setState(kNotice);
+}
+
+void UI::handleVoiceButtons(uint32_t now) {
+#if STOPWATCH_SWAP_BUTTONS
+  auto& right = M5.BtnA;
+  auto& left = M5.BtnB;
+#else
+  auto& right = M5.BtnB;
+  auto& left = M5.BtnA;
+#endif
+  const bool rightPressed = right.wasPressed();
+  const bool rightReleased = right.wasReleased();
+  const bool leftPressed = left.wasPressed();
+
+  if (state_ == kIdle || state_ == kAlert) {
+    if (rightPressed) startRecording(now);
+    return;
+  }
+  if (state_ == kRecord) {
+    if (leftPressed) {
+      cancelRecording();
+      return;
+    }
+    if (rightReleased) finishRecording();
+    return;
+  }
+  if (state_ == kReview) {
+    if (rightPressed) {
+      link_->sendVoiceSend(voiceId_);
+      strlcpy(resultText_, "已发送", sizeof(resultText_));
+      resultMood_ = Character::kHappy;
+      transcript_[0] = 0;
+      setState(kResult);
+      return;
+    }
+    if (leftPressed) {
+      link_->sendVoiceClear(voiceId_);
+      transcript_[0] = 0;
+      setState(kIdle);
+    }
+  }
+}
+
+void UI::startRecording(uint32_t now) {
+  if (!voiceActive_) voiceActive_ = mic_.begin();
+  if (!voiceActive_) {
+    strlcpy(noticeText_, "麦克风不可用", sizeof(noticeText_));
+    noticeLine_[0] = 0;
+    noticeUntil_ = millis() + 2500;
+    setState(kNotice);
+    return;
+  }
+  snprintf(voiceId_, sizeof(voiceId_), "v_%lu", static_cast<unsigned long>(now % 1000000UL));
+  voiceSeq_ = 0;
+  recordStartedAt_ = now;
+  transcript_[0] = 0;
+  link_->sendVoiceStart(voiceId_);
+  setState(kRecord);
+}
+
+void UI::captureStep() {
+  const int samples = mic_.read(chunk_, 512);
+  if (samples > 0) link_->sendVoiceChunk(voiceId_, voiceSeq_++, chunk_, static_cast<size_t>(samples));
+  if (millis() - recordStartedAt_ > 60000) finishRecording();
+}
+
+void UI::finishRecording() {
+  link_->sendVoiceEnd(voiceId_);
+  setState(kTranscribing);
+}
+
+void UI::cancelRecording() {
+  link_->sendVoiceClear(voiceId_);
+  transcript_[0] = 0;
+  setState(kIdle);
+}
+
+void UI::onLinkVoiceText(const char* id, const char* text, uint32_t audioMs) {
+  (void)id;
+  (void)audioMs;
+  strlcpy(transcript_, text != nullptr ? text : "", sizeof(transcript_));
+  setState(kReview);
+}
+
+void UI::onLinkVoiceStatus(const char* id, const char* state, const char* message) {
+  (void)id;
+  if (!strcmp(state, "sent")) {
+    strlcpy(resultText_, "已发送", sizeof(resultText_));
+    resultMood_ = Character::kHappy;
+    setState(kResult);
+    return;
+  }
+  if (!strcmp(state, "cleared")) {
+    if (state_ == kRecord || state_ == kReview) setState(kIdle);
+    return;
+  }
+  if (!strcmp(state, "error")) {
+    strlcpy(noticeText_, message != nullptr ? message : "语音不可用", sizeof(noticeText_));
+    noticeLine_[0] = 0;
+    noticeUntil_ = millis() + 3000;
+    setState(kNotice);
+  }
+}
+
+void UI::renderRecord() {
+  M5.Display.setBrightness(200);
+  brightness_ = 200;
+  character_.setMood(Character::kAlert);
+  character_.push(kFishX, kFishY);
+  drawAttentionRing(222, 7);
+  const uint32_t seconds = (millis() - recordStartedAt_) / 1000;
+  char line[48];
+  snprintf(line, sizeof(line), "录音中 %lus", static_cast<unsigned long>(seconds));
+  text::drawCentered(M5.Display, kCx, 346, line, kText, kBg);
+  text::drawCentered(M5.Display, kCx, 382, "松手结束 · 左键取消", kMuted, kBg);
+}
+
+void UI::renderTranscribing() {
+  M5.Display.setBrightness(STOPWATCH_BRIGHTNESS_IDLE);
+  brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
+  character_.setMood(Character::kIdle);
+  character_.push(kFishX, kFishY);
+  text::drawCentered(M5.Display, kCx, 346, "识别中…", kText, kBg);
+}
+
+void UI::renderReview() {
+  M5.Display.setBrightness(STOPWATCH_BRIGHTNESS_IDLE);
+  brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
+  static char lines[6][64];
+  const int count = text::wrap(transcript_, 420, lines, 6);
+  int y = 96;
+  for (int i = 0; i < count; i++) {
+    text::drawCentered(M5.Display, kCx, y, lines[i], kText, kBg);
+    y += text::kLineHeight;
+  }
+  text::drawCentered(M5.Display, kCx, 388, "右键发送", kAccent, kBg);
+  text::drawCentered(M5.Display, kCx, 420, "左键清空", kMuted, kBg);
 }
 
 void UI::onLinkQueue(uint8_t pending) {

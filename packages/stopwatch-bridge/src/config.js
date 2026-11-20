@@ -32,6 +32,10 @@ export const DEFAULT_CONFIG = Object.freeze({
   vibration: true,
   /** Name advertised in discovery replies. */
   deviceName: 'dsh-stopwatch',
+  /** Accept voice recordings from the watch and transcribe them. */
+  voice: true,
+  /** Language hint passed to the speech service. */
+  language: 'zh',
 })
 
 const MODES = new Set(['remote', 'notify'])
@@ -76,6 +80,8 @@ export function normalizeConfig(raw) {
   cfg.allowedTools = stringList('allowedTools', cfg.allowedTools)
   cfg.sound = boolean('sound', cfg.sound)
   cfg.vibration = boolean('vibration', cfg.vibration)
+  cfg.voice = boolean('voice', cfg.voice)
+  cfg.language = text('language', cfg.language)
   return Object.freeze(cfg)
 }
 

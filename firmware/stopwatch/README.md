@@ -44,6 +44,21 @@ python3 tools/build_sprites.py
 
 脚本会去背景、裁切、等比缩进 300×300、量化成 16 色 4bpp，生成 `src/assets/characters.h` 和一张预览图。要求见 [assets/character/README.md](assets/character/README.md)。
 
+## 语音输入
+
+| 操作 | 结果 |
+| --- | --- |
+| 按住**右键** | 开始录音：红环 + 「录音中 Ns」，PCM 以 32 ms 分片实时上传 |
+| 松开右键 | 结束录音 → 屏幕显示「识别中…」→ 出字后进入确认页 |
+| 再按右键 | 把文字发到当前会话（DSH 里表现为一条用户消息） |
+| 按左键（录音中） | 取消这次录音 |
+| 按左键（确认页） | 清空这段文字 |
+
+按键映射：默认右键 = `BtnB`(GPIO1)、左键 = `BtnA`(GPIO2)。实机如果左右相反，把
+`src/config.h` 里的 `STOPWATCH_SWAP_BUTTONS` 改成 `1` 重新烧写。
+
+麦克风走 ES8311（I2S，16 kHz 单声道），`M5.Mic` 已经按 StopWatch 的引脚配置好。
+
 ## 烧写
 
 ```bash

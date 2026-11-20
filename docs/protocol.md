@@ -100,6 +100,46 @@
 
 普通提示（连上、断开、会话完成）用同样的 `notice`，`kind` 为 `info|warn|delegate`。
 
+## 语音输入
+
+按住右键录音，松手上传，主机识别后回传文字；再按右键发送到会话，按左键清空。
+
+```json
+{"t":"voice_start","id":"v_1","rate":16000,"format":"s16le"}
+{"t":"voice_chunk","id":"v_1","seq":0,"data":"<base64 PCM>"}
+{"t":"voice_chunk","id":"v_1","seq":1,"data":"..."}
+{"t":"voice_end","id":"v_1"}
+```
+
+- 手表流式发送，每次约 512 样本（1 KB PCM → 1.4 KB base64），主机按 `seq` 拼接。
+- `rate` 固定 16000 Hz、单声道、16-bit little-endian；主机负责包成 WAV 再交给识别服务。
+- 单段最长 60 秒，超时主机丢弃并回 `voice_status`。
+
+主机回：
+
+```json
+{"t":"voice_text","id":"v_1","text":"把刚才那个改一下","audioMs":3200,"inferMs":820}
+{"t":"voice_status","id":"v_1","state":"transcribing"}
+{"t":"voice_status","id":"v_1","state":"sent","text":"已发送"}
+{"t":"voice_status","id":"v_1","state":"error","message":"语音识别未启用"}
+```
+
+手表再按一次右键：
+
+```json
+{"t":"voice_send","id":"v_1"}
+```
+
+主机把它作为一条 user 消息投递到**最近一次有用户发言的会话**（`agent.followup()`），并回 `voice_status: sent`。
+
+按左键：
+
+```json
+{"t":"voice_clear","id":"v_1"}
+```
+
+主机丢弃缓冲，回 `voice_status: cleared`。手表同时清屏回到待机。
+
 ## 状态上报
 
 手表每 60 秒（或电量变化 ≥ 5%）上报一次：

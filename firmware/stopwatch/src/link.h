@@ -32,6 +32,8 @@ class LinkListener {
   virtual void onLinkClose(const char *id, const char *outcome, const char *text) = 0;
   virtual void onLinkNotice(const char *kind, const char *text, const char *line) = 0;
   virtual void onLinkQueue(uint8_t pending) {}
+  virtual void onLinkVoiceText(const char* id, const char* text, uint32_t audioMs) = 0;
+  virtual void onLinkVoiceStatus(const char* id, const char* state, const char* message) = 0;
 };
 
 class Link {
@@ -47,6 +49,13 @@ class Link {
   uint8_t pending() const { return pending_; }
 
   void sendDecision(const char *id, const char *value, uint32_t latencyMs);
+
+  /** Voice input: start a recording, stream PCM, finish, then send or clear. */
+  void sendVoiceStart(const char *id);
+  void sendVoiceChunk(const char *id, uint32_t seq, const int16_t *samples, size_t count);
+  void sendVoiceEnd(const char *id);
+  void sendVoiceSend(const char *id);
+  void sendVoiceClear(const char *id);
 
  private:
   void connectWifi();

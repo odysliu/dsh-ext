@@ -136,6 +136,40 @@ inline void draw(Target& g, int x, int y, const char* utf8, uint16_t fg, uint16_
   }
 }
 
+/**
+ * Wrap UTF-8 text into at most `maxLines` lines of `maxWidth` pixels.
+ * @returns the number of lines written.
+ */
+inline int wrap(const char* utf8, int maxWidth, char out[][64], int maxLines) {
+  int line = 0;
+  int used = 0;
+  int column = 0;
+  out[0][0] = 0;
+  const char* cursor = utf8;
+  while (*cursor != 0 && line < maxLines) {
+    const char* start = cursor;
+    const uint32_t codepoint = detail::decode(cursor);
+    if (codepoint == 0) break;
+    const int advance = codepoint < 0x80 ? kAscii : kWide;
+    if (used + advance > maxWidth && column > 0) {
+      out[line][column] = 0;
+      line++;
+      if (line >= maxLines) break;
+      column = 0;
+      used = 0;
+      out[line][0] = 0;
+    }
+    const size_t bytes = static_cast<size_t>(cursor - start);
+    if (column + bytes < 63) {
+      memcpy(out[line] + column, start, bytes);
+      column += static_cast<int>(bytes);
+      out[line][column] = 0;
+    }
+    used += advance;
+  }
+  return line < maxLines ? line + 1 : maxLines;
+}
+
 /** Draw one line centred on `cx`. */
 template <typename Target>
 inline void drawCentered(Target& g, int cx, int y, const char* utf8, uint16_t fg, uint16_t bg) {
