@@ -28,6 +28,28 @@ export class VoiceBridge {
   }
 
   /**
+   * Start the one-time model preparation when the plugin loads, so the first
+   * press of the right button does not have to wait for a 300 MB download.
+   */
+  warmup() {
+    const speech = this.speech()
+    if (speech === null) return
+    try {
+      const snapshot = speech.snapshot()
+      const selected = snapshot.providers.find((provider) => provider.id === snapshot.selection.providerId)
+      if (selected === undefined) return
+      if (selected.preparation.phase === 'unprepared') {
+        this.logger?.info?.(
+          'stopwatch-bridge: preparing the local speech model (first run downloads ~300 MB)',
+        )
+        speech.prepare(selected.id)
+      }
+    } catch (error) {
+      this.logger?.warn?.(`stopwatch-bridge: speech warmup failed: ${error.message}`)
+    }
+  }
+
+  /**
    * Observe session traffic so `voice_send` knows the active conversation.
    * @param {any} session - session that produced the event.
    * @param {any} event - session event.

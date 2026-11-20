@@ -81,6 +81,8 @@ export class Bridge {
       this.ctx.on('session/event', (session, event) => this.voice.trackSession(session, event)),
     )
 
+    if (this.config.voice) this.voice.warmup()
+
     this.logger?.info?.(
       `stopwatch-bridge: ${this.config.mode === 'remote' ? 'watch-first' : 'notify-only'} mode, ` +
         `timeout ${Math.round(this.config.timeoutMs / 1000)}s`,
