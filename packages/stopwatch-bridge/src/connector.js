@@ -77,6 +77,7 @@ export class DeviceConnector extends EventEmitter {
   /** Open one connection attempt. */
   dial() {
     if (this.closed) return
+    if (this.socket !== null || this.current !== null) return
     const socket = net.connect({ host: this.host, port: this.port })
     this.socket = socket
     socket.setNoDelay(true)
