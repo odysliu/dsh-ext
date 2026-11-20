@@ -125,10 +125,13 @@ inline void draw(Target& g, int x, int y, const char* utf8, uint16_t fg, uint16_
       x += advance;
       continue;
     }
+    // pushImage(uint16_t*) byte-swaps on its way to the panel; pre-swapping
+    // cancels it so the glyphs keep the palette colours
     int index = 0;
     for (int gy = 0; gy < FONT_CELL_H; gy++) {
       for (int gx = 0; gx < advance; gx++) {
-        pixels[index++] = palette[detail::level_at(glyph, gx, gy)];
+        const uint16_t colour = palette[detail::level_at(glyph, gx, gy)];
+        pixels[index++] = static_cast<uint16_t>((colour >> 8) | (colour << 8));
       }
     }
     g.pushImage(x, y, advance, FONT_CELL_H, pixels);
