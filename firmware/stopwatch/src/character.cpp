@@ -30,8 +30,9 @@ FrameSet setFor(Character::Mood mood) {
 void Character::begin(uint16_t background) {
   background_ = background;
   for (int i = 0; i < kMaxFrames; i++) {
-    frames_[i].setPsram(true);
-    frames_[i].createSprite(CHAR_W, CHAR_H);
+    // the array constructor has no display parent; without it pushSprite dereferences null
+    frames_[i] = new M5Canvas(&M5.Display);
+    frames_[i]->createSprite(CHAR_W, CHAR_H);
   }
   ready_ = true;
   count_ = 0;
@@ -53,7 +54,7 @@ void Character::setMood(Mood mood) {
 
   uint16_t row[CHAR_W];
   for (int frame = 0; frame < count_; frame++) {
-    M5Canvas& canvas = frames_[frame];
+    M5Canvas& canvas = *frames_[frame];
     canvas.fillScreen(background_);
     const uint8_t* pixels = set.frames[frame];
     for (int y = 0; y < CHAR_H; y++) {
@@ -83,5 +84,5 @@ void Character::tick(uint32_t now) {
 
 void Character::push(int x, int y) {
   if (!ready_ || count_ == 0) return;
-  frames_[index_].pushSprite(x, y);
+  if (frames_[index_] != nullptr) frames_[index_]->pushSprite(x, y);
 }

@@ -35,7 +35,7 @@ class Character {
 
  private:
   static constexpr int kMaxFrames = 3;
-  M5Canvas frames_[kMaxFrames];
+  M5Canvas* frames_[kMaxFrames] = {nullptr, nullptr, nullptr};
   Mood mood_ = kIdle;
   int count_ = 0;
   int index_ = 0;
