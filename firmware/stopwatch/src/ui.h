@@ -63,6 +63,10 @@ class UI : public LinkListener {
   void setState(State next);
   void animate();
   void pulseBrightness(uint32_t now);
+  /** Mark user activity and wake the panel if it had blanked. */
+  void touch();
+  /** Dim or blank the panel after a long idle period. */
+  void updateIdleScreen(uint32_t now);
   void alert(uint32_t now);
   void playSound(const uint8_t* data, size_t size);
 
@@ -73,6 +77,9 @@ class UI : public LinkListener {
   uint8_t pending_ = 0;
 
   uint32_t stateSince_ = 0;
+  uint32_t lastActivity_ = 0;
+  bool screenOff_ = false;
+  bool screenDim_ = false;
   uint32_t lastFrame_ = 0;
   uint32_t lastPulse_ = 0;
   uint32_t lastAlertAt_ = 0;

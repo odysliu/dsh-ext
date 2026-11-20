@@ -51,8 +51,59 @@ void UI::begin(Link* link) {
 void UI::setState(State next) {
   state_ = next;
   stateSince_ = millis();
+  lastActivity_ = stateSince_;
+  screenOff_ = false;
+  screenDim_ = false;
+  brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
+  M5.Display.setBrightness(brightness_);
   denyArmed_ = false;
   render();
+}
+
+void UI::touch() {
+  lastActivity_ = millis();
+  if (screenOff_ || screenDim_) {
+    screenOff_ = false;
+    screenDim_ = false;
+    brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
+    render();
+  }
+}
+
+void UI::updateIdleScreen(uint32_t now) {
+  // only the resting screens sleep; alerts, prompts and recording stay lit
+  if (state_ != kIdle && state_ != kBoot) {
+    screenOff_ = false;
+    screenDim_ = false;
+    return;
+  }
+  const uint32_t idle = now - lastActivity_;
+  if (idle > STOPWATCH_SCREEN_OFF_MS) {
+    if (!screenOff_) {
+      screenOff_ = true;
+      screenDim_ = false;
+      brightness_ = 0;
+      M5.Display.setBrightness(0);
+#if STOPWATCH_DEBUG
+      Serial.println("[dsh] screen off");
+#endif
+    }
+    return;
+  }
+  if (idle > STOPWATCH_SCREEN_DIM_MS) {
+    if (!screenDim_) {
+      screenDim_ = true;
+      screenOff_ = false;
+      brightness_ = STOPWATCH_BRIGHTNESS_DIM;
+      M5.Display.setBrightness(STOPWATCH_BRIGHTNESS_DIM);
+#if STOPWATCH_DEBUG
+      Serial.println("[dsh] screen dim");
+#endif
+    }
+    return;
+  }
+  screenOff_ = false;
+  screenDim_ = false;
 }
 
 void UI::loop() {
@@ -83,7 +134,8 @@ void UI::loop() {
   handleVoiceButtons(now);
   if (state_ == kRecord) captureStep();
 
-  if (state_ == kAlert || state_ == kIdle) pulseBrightness(now);
+  updateIdleScreen(now);
+  if (!screenOff_ && !screenDim_ && (state_ == kAlert || state_ == kIdle)) pulseBrightness(now);
   if (state_ == kAlert && now - lastAlertAt_ > kAlertRepeatMs && alertCount_ < 4) {
     lastAlertAt_ = now;
     alertCount_++;
@@ -94,6 +146,9 @@ void UI::loop() {
 
   auto detail = M5.Touch.getDetail();
   if (detail.wasClicked()) {
+    const bool wasSleeping = screenOff_ || screenDim_;
+    touch();
+    if (wasSleeping) return;  // the first tap only wakes the screen
     if (state_ == kAlert) {
       setState(kPrompt);
     } else if (state_ == kPrompt) {

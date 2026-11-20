@@ -31,6 +31,17 @@
 #define STOPWATCH_HOST_TOKEN ""
 #endif
 
+/** Idle screen: dim after this long, blank after this long (ms). */
+#ifndef STOPWATCH_SCREEN_DIM_MS
+#define STOPWATCH_SCREEN_DIM_MS 20000
+#endif
+#ifndef STOPWATCH_SCREEN_OFF_MS
+#define STOPWATCH_SCREEN_OFF_MS 60000
+#endif
+#ifndef STOPWATCH_BRIGHTNESS_DIM
+#define STOPWATCH_BRIGHTNESS_DIM 12
+#endif
+
 /** 1 = the watch listens and the host dials in (works when the AP blocks device→host TCP). */
 #ifndef STOPWATCH_DEVICE_SERVER
 #define STOPWATCH_DEVICE_SERVER 1
