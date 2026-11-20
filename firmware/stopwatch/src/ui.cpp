@@ -146,7 +146,7 @@ void UI::animate() {
 }
 
 void UI::drawAttentionRing(int radius, int thickness) {
-  M5.Display.drawArc(kCx, kCx, radius, radius + thickness, 0, 360, kRing);
+  M5.Display.fillArc(kCx, kCx, radius, radius + thickness, 0, 360, kRing);
 }
 
 void UI::render() {

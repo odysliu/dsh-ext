@@ -227,6 +227,10 @@ export class VoiceBridge {
       return
     }
     try {
+      if (typeof agent.followup !== 'function') {
+        this.status(id, 'error', '当前会话不支持发送')
+        return
+      }
       agent.followup({
         id: `voice-${Date.now().toString(36)}`,
         role: 'user',
@@ -278,8 +282,14 @@ export class VoiceBridge {
 
   /** @returns {any | null} the agent that most recently received a user message. */
   targetAgent() {
-    const agents = this.ctx?.agents
-    if (agents === undefined) return null
+    // optional service: property access throws without an inject, so use ctx.get
+    let agents
+    try {
+      agents = this.ctx?.get?.('agents')
+    } catch {
+      return null
+    }
+    if (agents === undefined || agents === null) return null
     if (this.lastSessionId !== null) {
       const agent = agents.get?.(this.lastSessionId)
       if (agent !== undefined && agent !== null) return agent

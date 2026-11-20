@@ -16,14 +16,13 @@ function setup(options = {}) {
       transcribe: async () => ({ text: '把刚才那个改一下', audioSeconds: 1, inferenceSeconds: 0.2 }),
       prepare: () => {},
   }
-  const ctx = {
-    speechToText: speechService,
-    get: (name) => (name === 'speechToText' ? speechService : undefined),
-    agents: {
-      get: (id) => (id === 'session-1' ? { id, followup: (message) => followed.push(message) } : undefined),
-      list: () => [{ id: 'session-1', followup: (message) => followed.push(message) }],
-    },
+  const agents = {
+    get: (id) => (id === 'session-1' ? { id, followup: (message) => followed.push(message) } : undefined),
+    list: () => [{ id: 'session-1', followup: (message) => followed.push(message) }],
   }
+  // services come through ctx.get in Cordis; property access throws without an inject
+  const services = { speechToText: speechService, agents }
+  const ctx = { get: (name) => services[name] }
   const bridge = new VoiceBridge({ ctx, send: (message) => sent.push(message), logger: { warn() {} } })
   return { bridge, sent, followed, ctx }
 }
