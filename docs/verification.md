@@ -6,7 +6,7 @@
 
 | 项目 | 方式 | 结果 |
 | --- | --- | --- |
-| Host 插件测试 | `node --test packages/stopwatch-bridge/test/*.test.js` | 25 个用例通过（协议分帧、配置校验、排版、队列、TCP 集成） |
+| Host 插件测试 | `npm test` | 49 个主机用例 + 14 个资产/契约用例通过（详见 [testing.md](testing.md)） |
 | 插件安装 | `plugin_manager install_bundle`（link: 本地目录） | `application: applied`，profile `web` 已加载 |
 | 设备服务 | `lsof -iTCP:47777 -iUDP:47778` | 两个端口都在监听 |
 | 局域网发现 | `tools/fake-device.mjs` 广播发现 | 收到 `{"t":"host"}` 并连上 10.184.47.60:47777 |

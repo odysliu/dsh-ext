@@ -20,3 +20,7 @@ jobs:
           done
       - name: Host plugin tests
         run: node --test "packages/stopwatch-bridge/test/*.test.js"
+      - name: Asset and contract tests
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 -m unittest discover -s tools -p 'test_assets.py'

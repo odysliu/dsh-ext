@@ -51,6 +51,29 @@ export class FakeWatch {
   }
 
   /**
+   * Send arbitrary bytes (malformed payloads, split frames, oversize lines).
+   * @param {string} text - raw payload.
+   */
+  sendRaw(text) {
+    this.socket.write(text)
+  }
+
+  /**
+   * Wait for the socket to close or error.
+   * @param {number} [timeoutMs] - deadline.
+   * @returns {Promise<boolean>} whether the server closed the connection.
+   */
+  closed(timeoutMs = 2000) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), timeoutMs)
+      this.socket.once('close', () => {
+        clearTimeout(timer)
+        resolve(true)
+      })
+    })
+  }
+
+  /**
    * Wait for the next message of one type.
    * @param {string} type - `t` value.
    * @param {number} [timeoutMs] - rejection deadline.

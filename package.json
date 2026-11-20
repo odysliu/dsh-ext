@@ -5,9 +5,11 @@
   "description": "External extensions for DeepSeek Harness, plus the M5Stack StopWatch firmware that mirrors them.",
   "type": "module",
   "scripts": {
-    "test": "node --test packages/stopwatch-bridge/test",
+    "test": "node --test \"packages/stopwatch-bridge/test/*.test.js\" && python3 -m unittest discover -s tools -p 'test_assets.py'",
     "fake-device": "node tools/fake-device.mjs",
-    "setup": "node tools/setup-toolchain.mjs"
+    "setup": "node tools/setup-toolchain.mjs",
+    "test:host": "node --test \"packages/stopwatch-bridge/test/*.test.js\"",
+    "test:assets": "python3 -m unittest discover -s tools -p 'test_assets.py'"
   },
   "license": "MIT"
 }

@@ -123,3 +123,11 @@ test('preview cache is bounded and single use', () => {
   assert.equal(cache.take('c'), 'three')
   assert.equal(cache.take('c'), '')
 })
+
+test('voice config is validated like the rest', () => {
+  assert.equal(normalizeConfig({}).voice, true)
+  assert.equal(normalizeConfig({}).language, 'zh')
+  assert.equal(normalizeConfig({ voice: false }).voice, false)
+  assert.throws(() => normalizeConfig({ voice: 'yes' }), /voice/)
+  assert.throws(() => normalizeConfig({ language: 3 }), /language/)
+})

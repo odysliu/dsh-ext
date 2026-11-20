@@ -118,3 +118,97 @@ test('WAV header carries the sample parameters', () => {
   assert.equal(wav.readUInt16LE(34), 16)
   assert.equal(wav.readUInt32LE(40), 100)
 })
+
+test('an over-long recording is dropped with a clear reason', async () => {
+  const { bridge, sent } = setup()
+  bridge.handle({ t: 'voice_start', id: 'big' })
+  // 60 s of 16 kHz mono is 1.92 MB; feed one byte more in 64 KB chunks
+  const chunk = Buffer.alloc(65536, 1).toString('base64')
+  for (let i = 0; i < 30; i += 1) bridge.handle({ t: 'voice_chunk', id: 'big', seq: i, data: chunk })
+  assert.equal(sent.at(-1).state, 'error')
+  assert.match(sent.at(-1).message, /太长/)
+  bridge.handle({ t: 'voice_end', id: 'big' })
+  assert.equal(sent.at(-1).state, 'error')
+})
+
+test('chunks are appended in arrival order, not sequence order', async () => {
+  let received = null
+  const { bridge } = setup({
+    speech: {
+      snapshot: () => ({ providers: [{ id: 'sense', preparation: { phase: 'ready' } }], selection: { providerId: 'sense' } }),
+      resolve: (request) => ({ ...request, provider: {} }),
+      transcribe: async (spec) => {
+        received = Buffer.from(spec.audio)
+        return { text: 'ok', audioSeconds: 1, inferenceSeconds: 0.1 }
+      },
+      prepare: () => {},
+    },
+  })
+  bridge.handle({ t: 'voice_start', id: 'v1' })
+  bridge.handle({ t: 'voice_chunk', id: 'v1', seq: 5, data: Buffer.alloc(1600, 7).toString('base64') })
+  bridge.handle({ t: 'voice_chunk', id: 'v1', seq: 2, data: Buffer.alloc(1600, 9).toString('base64') })
+  bridge.handle({ t: 'voice_end', id: 'v1' })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(received[44], 7)
+  assert.equal(received[44 + 1600], 9)
+})
+
+test('a new start resets the previous buffer', async () => {
+  let received = null
+  const { bridge } = setup({
+    speech: {
+      snapshot: () => ({ providers: [{ id: 'sense', preparation: { phase: 'ready' } }], selection: { providerId: 'sense' } }),
+      resolve: (request) => ({ ...request, provider: {} }),
+      transcribe: async (spec) => {
+        received = spec.audio
+        return { text: 'ok', audioSeconds: 1, inferenceSeconds: 0.1 }
+      },
+      prepare: () => {},
+    },
+  })
+  bridge.handle({ t: 'voice_start', id: 'v1' })
+  bridge.handle({ t: 'voice_chunk', id: 'v1', seq: 0, data: Buffer.alloc(3200, 1).toString('base64') })
+  bridge.handle({ t: 'voice_start', id: 'v1' })
+  bridge.handle({ t: 'voice_chunk', id: 'v1', seq: 0, data: Buffer.alloc(3200, 2).toString('base64') })
+  bridge.handle({ t: 'voice_end', id: 'v1' })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(received.length, 44 + 3200)
+})
+
+test('ending without a start is reported, not thrown', async () => {
+  const { bridge, sent } = setup()
+  bridge.handle({ t: 'voice_end', id: 'ghost' })
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal(sent.at(-1).state, 'error')
+})
+
+test('an empty transcript asks the user to try again', async () => {
+  const { bridge, sent } = setup({
+    speech: {
+      snapshot: () => ({ providers: [{ id: 'sense', preparation: { phase: 'ready' } }], selection: { providerId: 'sense' } }),
+      resolve: (request) => ({ ...request, provider: {} }),
+      transcribe: async () => ({ text: '   ', audioSeconds: 1, inferenceSeconds: 0.1 }),
+      prepare: () => {},
+    },
+  })
+  bridge.handle({ t: 'voice_start', id: 'v1' })
+  bridge.handle({ t: 'voice_chunk', id: 'v1', seq: 0, data: Buffer.alloc(3200, 1).toString('base64') })
+  bridge.handle({ t: 'voice_end', id: 'v1' })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(sent.at(-1).state, 'error')
+  assert.match(sent.at(-1).message, /听清/)
+})
+
+test('sending before a transcript exists does nothing harmful', async () => {
+  const { bridge, sent, followed } = setup()
+  bridge.handle({ t: 'voice_send', id: 'v1' })
+  assert.equal(followed.length, 0)
+  assert.equal(sent.at(-1).state, 'error')
+})
+
+test('garbage base64 is ignored rather than crashing', async () => {
+  const { bridge } = setup()
+  bridge.handle({ t: 'voice_start', id: 'v1' })
+  bridge.handle({ t: 'voice_chunk', id: 'v1', seq: 0, data: '@@@not-base64@@@' })
+  bridge.handle({ t: 'voice_clear', id: 'v1' })
+})
