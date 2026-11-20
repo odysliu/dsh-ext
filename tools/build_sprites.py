@@ -147,6 +147,37 @@ def rgb565(color: tuple[int, int, int]) -> int:
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
 
+def despeckle(indexed: Image.Image) -> Image.Image:
+    """Replace isolated pixels with the majority of their neighbours.
+
+    Thin anti-aliased lines sometimes quantise into single white dots that look
+    like scratches on the panel.
+    """
+    w, h = indexed.size
+    src = indexed.tobytes()
+    out = bytearray(src)
+    for y in range(1, h - 1):
+        row = y * w
+        for x in range(1, w - 1):
+            i = row + x
+            value = src[i]
+            if value == 0:
+                continue
+            counts = {}
+            for dy in (-1, 0, 1):
+                base = (y + dy) * w
+                for dx in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    n = src[base + x + dx]
+                    counts[n] = counts.get(n, 0) + 1
+            if counts.get(value, 0) == 0:
+                out[i] = max(counts, key=counts.get)
+    result = Image.frombytes("P", indexed.size, bytes(out))
+    result.putpalette(indexed.getpalette())
+    return result
+
+
 def pack(indexed: Image.Image) -> bytes:
     """One byte per pixel at 8bpp; two nibbles per byte at 4bpp."""
     data = bytearray()
@@ -190,9 +221,9 @@ def main() -> None:
         indexed, colors = quantize(fitted_frames[0])
         palette_img = Image.new("P", (1, 1))
         palette_img.putpalette([0, 0, 0] + quantize_palette(fitted_frames[0]))
-        frames = [indexed]
+        frames = [despeckle(indexed)]
         for fitted in fitted_frames[1:]:
-            frames.append(remap(fitted, palette_img))
+            frames.append(despeckle(remap(fitted, palette_img)))
         sprites[state] = (frames, colors)
 
     OUT_HEADER.parent.mkdir(parents=True, exist_ok=True)

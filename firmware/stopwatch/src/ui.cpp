@@ -26,7 +26,7 @@ constexpr uint16_t kAccent = rgb(77, 107, 254);
 constexpr uint16_t kDanger = rgb(255, 96, 120);
 
 constexpr int kFishX = 83;
-constexpr int kFishY = 36;
+constexpr int kFishY = 48;
 constexpr uint16_t kRing = rgb(255, 64, 72);
 
 constexpr int kButtonY = 332;
@@ -204,7 +204,7 @@ void UI::renderIdle() {
 
 void UI::drawStatusLine() {
   const bool connected = link_ != nullptr && link_->connected();
-  const int y = 346;
+  const int y = 352;
   if (state_ == kAlert) {
     const char* label = "有确认请求";
     text::drawCentered(M5.Display, kCx, y, label, kText, kBg);
@@ -215,16 +215,17 @@ void UI::drawStatusLine() {
     text::drawCentered(M5.Display, kCx, y, "未连接", kMuted, kBg);
   }
 
-  if (state_ == kAlert) return;  // keep the alert screen to one clear line
+  if (state_ == kAlert) return;  // the alert screen keeps one clear line
 
-  char footer[40];
+  // one compact line at the bottom edge; the character owns the centre
+  char footer[48];
   const int battery = link_ != nullptr ? link_->battery() : -1;
   if (battery >= 0) {
-    snprintf(footer, sizeof(footer), "%d%%  %ddBm", battery, link_ != nullptr ? link_->rssi() : 0);
+    snprintf(footer, sizeof(footer), "已连接 %d%%", battery);
   } else {
-    snprintf(footer, sizeof(footer), "%ddBm", link_ != nullptr ? link_->rssi() : 0);
+    strlcpy(footer, "已连接", sizeof(footer));
   }
-  text::drawCentered(M5.Display, kCx, 412, footer, kMuted, kBg);
+  text::drawCentered(M5.Display, kCx, 408, footer, kMuted, kBg);
 }
 
 void UI::drawButton(int x, int y, int w, int h, const char* label, uint16_t fill, uint16_t textColor,
@@ -274,7 +275,7 @@ void UI::renderResult() {
   character_.setMood(resultMood_);
   character_.push(kFishX, kFishY);
   const uint16_t color = resultMood_ == Character::kHappy ? kAccent : kMuted;
-  text::drawCentered(M5.Display, kCx, 356, resultText_, color, kBg);
+  text::drawCentered(M5.Display, kCx, 362, resultText_, color, kBg);
 }
 
 void UI::renderNotice() {
