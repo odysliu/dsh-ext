@@ -24,6 +24,7 @@ class UI : public LinkListener {
   void onLinkDisconnected() override;
   void onDumpRequested() override;
   void onDone(const char* title, const char* id) override;
+  String describe() override;
   void onLinkPrompt(const PromptView& prompt) override;
   void onLinkClose(const char* id, const char* outcome, const char* text) override;
   void onLinkNotice(const char* kind, const char* text, const char* line) override;
@@ -57,6 +58,8 @@ class UI : public LinkListener {
   void renderDone();
   /** The screen to fall back to: approval, then a waiting completion ring, then idle. */
   State restingState() const;
+  /** Whether this state owns the screen as an event. */
+  bool isEventState(State state) const;
   /** Dump whatever is on screen (used for remote screenshots). */
   void dumpScreen();
   void handleVoiceButtons(uint32_t now);

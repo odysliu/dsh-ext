@@ -29,8 +29,8 @@ constexpr int kFishX = 83;
 constexpr int kFishY = 48;
 constexpr uint16_t kRing = rgb(255, 64, 72);
 constexpr uint16_t kDoneRing = rgb(52, 211, 138);
-constexpr uint16_t kDoneRingDim = rgb(12, 46, 36);
-constexpr uint16_t kDoneText = rgb(126, 240, 190);
+constexpr uint16_t kDoneRingDim = rgb(16, 62, 48);
+constexpr uint16_t kDoneText = rgb(206, 255, 232);
 
 constexpr int kButtonY = 332;
 constexpr int kButtonH = 56;
@@ -57,10 +57,15 @@ void UI::setState(State next) {
   lastActivity_ = stateSince_;
   screenOff_ = false;
   screenDim_ = false;
-  brightness_ = STOPWATCH_BRIGHTNESS_IDLE;
+  // an event must be readable at a glance, never the standby level
+  brightness_ = isEventState(next) ? STOPWATCH_BRIGHTNESS_EVENT : STOPWATCH_BRIGHTNESS_IDLE;
   M5.Display.setBrightness(brightness_);
   denyArmed_ = false;
   render();
+}
+
+bool UI::isEventState(State state) const {
+  return state == kAlert || state == kPrompt || state == kResult || state == kNotice || state == kDone;
 }
 
 void UI::touch() {
@@ -167,6 +172,20 @@ void UI::loop() {
 
 void UI::onDumpRequested() { dumpScreen(); }
 
+String UI::describe() {
+  String text = "state=";
+  text += static_cast<int>(state_);
+  text += " bright=";
+  text += static_cast<int>(brightness_);
+  text += " off=";
+  text += screenOff_ ? 1 : 0;
+  text += " dim=";
+  text += screenDim_ ? 1 : 0;
+  text += " done=";
+  text += static_cast<int>(donePending_);
+  return text;
+}
+
 void UI::onDone(const char* title, const char* id) {
   (void)id;
   strlcpy(doneTitle_, title != nullptr && title[0] != 0 ? title : "任务完成", sizeof(doneTitle_));
@@ -177,6 +196,8 @@ void UI::onDone(const char* title, const char* id) {
   }
   if (state_ == kDone) {
     lastActivity_ = millis();
+    brightness_ = STOPWATCH_BRIGHTNESS_EVENT;
+    M5.Display.setBrightness(brightness_);
     renderDone();  // same screen, newest title
     return;
   }

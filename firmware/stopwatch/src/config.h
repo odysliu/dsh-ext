@@ -43,6 +43,11 @@
 #ifndef STOPWATCH_SCREEN_OFF_MS
 #define STOPWATCH_SCREEN_OFF_MS 60000
 #endif
+/** Brightness while an event (completion, approval, notice) owns the screen. */
+#ifndef STOPWATCH_BRIGHTNESS_EVENT
+#define STOPWATCH_BRIGHTNESS_EVENT 230
+#endif
+
 #ifndef STOPWATCH_BRIGHTNESS_DIM
 #define STOPWATCH_BRIGHTNESS_DIM 12
 #endif

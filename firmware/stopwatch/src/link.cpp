@@ -90,6 +90,7 @@ void Link::loop() {
     static uint32_t lastBeat = 0;
     if (millis() - lastBeat > 4000) {
       lastBeat = millis();
+      if (listener_ != nullptr) Serial.printf("[dsh] ui %s\n", listener_->describe().c_str());
       Serial.printf("[dsh] alive wifi=%d ip=%s srv=%d tcp=%d host=%s\n", wifiUp_ ? 1 : 0,
                     wifiUp_ ? WiFi.localIP().toString().c_str() : "-", serverStarted_ ? 1 : 0, connected_ ? 1 : 0,
                     host_[0] != 0 ? host_ : "-");

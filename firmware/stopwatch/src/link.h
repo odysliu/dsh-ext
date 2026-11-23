@@ -33,6 +33,8 @@ class LinkListener {
   virtual void onLinkDisconnected() {}
   virtual void onDumpRequested() {}
   virtual void onDone(const char* title, const char* id) {}
+  /** Short state/brightness description for the serial log. */
+  virtual String describe() { return String(); }
   virtual void onLinkPrompt(const PromptView &prompt) = 0;
   virtual void onLinkClose(const char *id, const char *outcome, const char *text) = 0;
   virtual void onLinkNotice(const char *kind, const char *text, const char *line) = 0;
