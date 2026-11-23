@@ -52,6 +52,9 @@ void UI::begin(Link* link) {
 }
 
 void UI::setState(State next) {
+  // A pending completion owns the resting screen until it is acknowledged;
+  // otherwise a link drop (or any other path back to idle) would erase it.
+  if (next == kIdle && donePending_ > 0) next = kDone;
   state_ = next;
   stateSince_ = millis();
   lastActivity_ = stateSince_;
