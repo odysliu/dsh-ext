@@ -63,6 +63,7 @@
 | `maxWidthPx` / `maxLines` | `420` / `6` | 手表屏幕能放下的排版预算，超出即判定"太复杂" |
 | `deniedTools` / `allowedTools` | `[]` | 工具白/黑名单 |
 | `sound` / `vibration` | `true` | 手表提示音与震动 |
+| `releaseFile` | `<repo>/.tools/flash.lock` | 烧写哨兵：文件存在时插件主动放开串口，烧完自动重连；`tools/flash.mjs` 会自己写入和删除，一般不用改 |
 
 ## 工作原理
 

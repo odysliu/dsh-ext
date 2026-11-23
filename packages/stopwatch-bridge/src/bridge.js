@@ -6,6 +6,7 @@
 import { DeviceServer } from './server.js'
 import { DeviceConnector } from './connector.js'
 import { AutoTransport, SerialConnector } from './serial.js'
+import { record } from './diagnostics.js'
 import { Discovery } from './discovery.js'
 import { ApprovalQueue } from './queue.js'
 import { PreviewCache, summarizeToolCall } from './preview.js'
@@ -49,6 +50,15 @@ export class Bridge {
 
   /** Register listeners and start both sockets. */
   /**
+   * Write one diagnostic record when a log file is configured.
+   * @param {string} event - short event name.
+   * @param {Record<string, unknown>} [fields] - extra structured fields.
+   */
+  trace(event, fields = {}) {
+    record(this.config.logFile, event, fields)
+  }
+
+  /**
    * Tell the watch when a top-level session finished its turn.
    * @param {any} session - session that produced the event.
    * @param {any} event - the session event.
@@ -59,7 +69,9 @@ export class Bridge {
     if (event.data?.reason?.kind !== 'completed') return
     // subagent turns would flood the watch; only the sessions a human opened
     if (session?.header?.parentSession !== undefined) return
-    this.server.send({ t: 'done', id: String(session.id), title: this.sessionLabel(session), at: Date.now() })
+    const title = this.sessionLabel(session)
+    this.trace('done', { session: String(session.id), title, device: this.server.device !== null })
+    this.server.send({ t: 'done', id: String(session.id), title, at: Date.now() })
   }
 
   /**
@@ -107,6 +119,11 @@ export class Bridge {
     this.started = true
 
     this.onDevice = (device) => {
+      this.trace(device === null ? 'device-lost' : 'device-connected', {
+        id: device?.id ?? '',
+        firmware: device?.firmware ?? '',
+        battery: device?.battery ?? -1,
+      })
       if (device !== null) {
         this.queue.refresh()
         return
@@ -170,12 +187,25 @@ export class Bridge {
    * @returns {Promise<string>} the approval outcome.
    */
   async onApproval(request, next) {
+    this.trace('approval', {
+      tool: request.toolName,
+      callId: String(request.callId ?? ''),
+      session: String(request.session?.id ?? ''),
+      mode: this.config.mode,
+      device: this.server.device !== null,
+    })
     if (this.config.mode !== 'remote') {
       this.notifyOnly(request)
       return next()
     }
-    if (this.server.device === null) return next()
-    if (!this.toolAllowed(request.toolName)) return next()
+    if (this.server.device === null) {
+      this.trace('approval-skipped', { reason: 'no-device' })
+      return next()
+    }
+    if (!this.toolAllowed(request.toolName)) {
+      this.trace('approval-skipped', { reason: 'tool-filtered', tool: request.toolName })
+      return next()
+    }
 
     let view
     try {
@@ -187,6 +217,7 @@ export class Bridge {
     }
 
     if (view.mode === 'delegate') {
+      this.trace('approval-skipped', { reason: 'delegate' })
       this.server.send({
         t: 'notice',
         kind: 'delegate',
@@ -197,7 +228,9 @@ export class Bridge {
       return next()
     }
 
+    this.trace('approval-shown', { tool: request.toolName })
     const outcome = await this.queue.wait({ req: request, view })
+    this.trace('approval-outcome', { outcome })
     if (outcome === 'allow') return 'allowed-once'
     if (outcome === 'deny') return 'rejected'
     if (outcome === 'abort') return 'cancelled'

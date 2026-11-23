@@ -5,6 +5,11 @@
  * `Config` export.
  */
 
+import { fileURLToPath } from 'node:url'
+
+/** `<repo>/.tools/flash.lock`, the sentinel `tools/flash.mjs` writes. */
+const DEFAULT_RELEASE_FILE = fileURLToPath(new URL('../../../.tools/flash.lock', import.meta.url))
+
 export const DEFAULT_CONFIG = Object.freeze({
   /** TCP port the watch connects to. */
   port: 47777,
@@ -42,12 +47,20 @@ export const DEFAULT_CONFIG = Object.freeze({
   vibration: true,
   /** Name advertised in discovery replies. */
   deviceName: 'dsh-stopwatch',
+  /** Append NDJSON diagnostics here; empty disables logging. */
+  logFile: '',
   /** Announce finished turns on the watch with a green ring. */
   completion: true,
   /** Accept voice recordings from the watch and transcribe them. */
   voice: true,
   /** Language hint passed to the speech service. */
   language: 'zh',
+  /**
+   * Sentinel file that means "a flashing tool owns the serial port". While it
+   * exists the bridge closes its USB transport so `esptool` can upload, then
+   * reconnects once the file is gone. `tools/flash.mjs` writes this path.
+   */
+  releaseFile: DEFAULT_RELEASE_FILE,
 })
 
 const MODES = new Set(['remote', 'notify'])
@@ -102,9 +115,11 @@ export function normalizeConfig(raw) {
   cfg.allowedTools = stringList('allowedTools', cfg.allowedTools)
   cfg.sound = boolean('sound', cfg.sound)
   cfg.vibration = boolean('vibration', cfg.vibration)
+  cfg.logFile = text('logFile', cfg.logFile)
   cfg.completion = boolean('completion', cfg.completion)
   cfg.voice = boolean('voice', cfg.voice)
   cfg.language = text('language', cfg.language)
+  cfg.releaseFile = text('releaseFile', cfg.releaseFile)
   return Object.freeze(cfg)
 }
 

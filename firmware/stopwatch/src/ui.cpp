@@ -41,6 +41,8 @@ constexpr int kAllowX = 260;
 constexpr uint32_t kResultMs = 1600;
 constexpr uint32_t kDenyArmMs = 2500;
 constexpr uint32_t kAlertRepeatMs = 4200;
+/** Give up on a transcript that the host never answered. */
+constexpr uint32_t kTranscribeTimeoutMs = 20000;
 
 }  // namespace
 
@@ -151,6 +153,15 @@ void UI::loop() {
 
   handleVoiceButtons(now);
   if (state_ == kRecord) captureStep();
+
+  // A lost link, a busy host or a dead recogniser must never leave the watch on
+  // 识别中 with no way back; give up and say so.
+  if (state_ == kTranscribing && now - stateSince_ > kTranscribeTimeoutMs) {
+    strlcpy(noticeText_, "识别超时", sizeof(noticeText_));
+    noticeLine_[0] = 0;
+    noticeUntil_ = now + 3000;
+    setState(kNotice);
+  }
 
   updateIdleScreen(now);
   if (!screenOff_ && !screenDim_ && (state_ == kAlert || state_ == kIdle)) pulseBrightness(now);
@@ -552,6 +563,15 @@ void UI::handleVoiceButtons(uint32_t now) {
 }
 
 void UI::startRecording(uint32_t now) {
+  // Without a welcome every voice frame is dropped on the floor, so the watch
+  // would record ten seconds and then sit on 识别中 forever.
+  if (link_ == nullptr || !link_->connected()) {
+    strlcpy(noticeText_, "手表未连接电脑", sizeof(noticeText_));
+    noticeLine_[0] = 0;
+    noticeUntil_ = millis() + 2500;
+    setState(kNotice);
+    return;
+  }
   if (!voiceActive_) voiceActive_ = mic_.begin();
   if (!voiceActive_) {
     strlcpy(noticeText_, "麦克风不可用", sizeof(noticeText_));

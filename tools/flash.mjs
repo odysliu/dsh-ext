@@ -11,7 +11,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
@@ -19,6 +19,11 @@ import process from 'node:process'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const TOOLS = join(ROOT, '.tools')
 const SKETCH = join(ROOT, 'firmware', 'stopwatch')
+// Sentinel the stopwatch-bridge watches: while it exists the plugin closes its
+// USB transport, so esptool gets the port without restarting dsh.
+const LOCK = join(TOOLS, 'flash.lock')
+// Keep arduino-cli's object cache inside the checkout instead of ~/Library.
+const BUILD = join(TOOLS, 'build', 'cache')
 const CLI = existsSync(join(TOOLS, 'bin', process.platform === 'win32' ? 'arduino-cli.exe' : 'arduino-cli'))
   ? join(TOOLS, 'bin', process.platform === 'win32' ? 'arduino-cli.exe' : 'arduino-cli')
   : process.platform === 'win32'
@@ -73,9 +78,44 @@ function listPorts() {
   }
 }
 
+/**
+ * Ask the running bridge to let go of the serial port, and make sure the file
+ * disappears however this process ends.
+ */
+function claimRelease() {
+  writeFileSync(LOCK, `flash.mjs pid ${process.pid} at ${new Date().toISOString()}\n`)
+  const clean = () => rmSync(LOCK, { force: true })
+  process.on('exit', clean)
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => {
+      clean()
+      process.exit(130)
+    })
+  }
+  console.log(`✓ asked the bridge to release the port (${LOCK})`)
+}
+
+/**
+ * Block until nothing else holds the port, so esptool does not fight the plugin.
+ * @param {string} port - serial device path.
+ * @param {number} timeoutMs - how long to wait.
+ * @returns {boolean} whether the port came free.
+ */
+function waitForPort(port, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const result = spawnSync('lsof', ['-t', port], { encoding: 'utf8' })
+    if (String(result.stdout ?? '').trim() === '') return true
+    spawnSync('sleep', ['0.5'])
+  }
+  return false
+}
+
+claimRelease()
+
 console.log(`compile ${SKETCH}`)
 console.log(`  fqbn ${FQBN}`)
-cli(['compile', '--fqbn', FQBN, '--warnings', 'default', '--output-dir', join(TOOLS, 'build'), SKETCH])
+cli(['compile', '--build-path', BUILD, '--fqbn', FQBN, '--warnings', 'default', '--output-dir', join(TOOLS, 'build'), SKETCH])
 console.log('✓ compiled')
 
 if (args['compile-only'] !== undefined) process.exit(0)
@@ -92,6 +132,9 @@ if (port === '') {
 }
 
 console.log(`upload to ${port}`)
+if (!waitForPort(port, 15000)) {
+  console.warn(`! ${port} is still held by another process; upload may retry on its own`)
+}
 cli(['upload', '--fqbn', FQBN, '--port', port, '--input-dir', join(TOOLS, 'build'), SKETCH])
 console.log('✓ flashed')
 

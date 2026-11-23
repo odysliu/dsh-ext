@@ -10,14 +10,17 @@
  */
 
 import { spawn } from 'node:child_process'
-import { createWriteStream } from 'node:fs'
+import { createWriteStream, existsSync } from 'node:fs'
 import { execFile } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { LineDecoder, PROTOCOL_VERSION, encodeMessage, parseMessage } from './protocol.js'
+import { DeviceConnector } from './connector.js'
 
 const HEARTBEAT_INTERVAL_MS = 8000
 const DEVICE_TIMEOUT_MS = 30000
 const RETRY_MS = 3000
+/** How long a re-offered link waits before the same watch is welcomed again. */
+const REPAIR_MS = 5000
 
 /** Ports that look like an ESP32 running the stopwatch firmware. */
 const CANDIDATES = {
@@ -84,6 +87,8 @@ export class SerialConnector extends EventEmitter {
     this.heartbeat = null
     this.closed = false
     this.opening = false
+    /** @type {number} timestamp of the last welcome we wrote to the watch. */
+    this.pairedAt = 0
   }
 
   /** @returns {any | null} the paired device, when one is connected. */
@@ -189,6 +194,20 @@ export class SerialConnector extends EventEmitter {
     const parsed = parseMessage(line)
     if (!parsed.ok) return // debug lines share the port; ignore them
     const message = parsed.value
+
+    // The watch offers the link every couple of seconds until it is welcomed, so
+    // a hello while we still hold a pairing means our welcome never landed (the
+    // watch rebooted, or the write raced the port). Answering it again is the
+    // only way back: the stale pairing would keep the heartbeat happy while the
+    // screen stays on 未连接 and every prompt is written into the void.
+    if (message.t === 'hello' && this.current !== null) {
+      const sameWatch = String(message.id ?? '') === this.current.id
+      if (!sameWatch || Date.now() - this.pairedAt >= REPAIR_MS) {
+        this.current = null
+        this.emit('device', null)
+      }
+    }
+
     const device = this.current
 
     if (device === null) {
@@ -207,6 +226,7 @@ export class SerialConnector extends EventEmitter {
         lastSeen: Date.now(),
       }
       this.send({ t: 'welcome', proto: PROTOCOL_VERSION, server: 'dsh-stopwatch' })
+      this.pairedAt = Date.now()
       this.logger?.info?.(
         `stopwatch-bridge: watch paired over USB (fw ${this.current.firmware}, battery ${this.current.battery}%)`,
       )
@@ -280,6 +300,8 @@ export class AutoTransport extends EventEmitter {
     /** @type {NodeJS.Timeout | null} */
     this.supervisor = null
     this.closed = false
+    /** @type {() => Promise<string[]>} seam for tests: which serial ports exist. */
+    this.listPorts = listPorts
   }
 
   /** @returns {any | null} the paired device. */
@@ -290,14 +312,37 @@ export class AutoTransport extends EventEmitter {
   /** Start supervising which transport should be live. */
   async listen() {
     await this.tick()
-    this.supervisor = setInterval(() => this.tick(), 5000)
+    // The supervisor runs forever: an unhandled rejection here used to take the
+    // whole host down (pulling the cable is enough to reach the TCP branch).
+    this.supervisor = setInterval(() => this.tick().catch((error) => this.warn(error)), 5000)
     this.supervisor.unref?.()
+  }
+
+  /**
+   * Log a supervisor failure without throwing.
+   * @param {unknown} error - the failure.
+   */
+  warn(error) {
+    this.logger?.warn?.(`stopwatch-bridge: transport check failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 
   /** Re-evaluate: cable present wins, otherwise use the network. */
   async tick() {
     if (this.closed) return
-    const ports = await listPorts().catch(() => [])
+
+    // `tools/flash.mjs` drops a sentinel before it uploads: esptool needs the
+    // port to itself, so step aside until the file is gone, then reconnect.
+    if (this.config.releaseFile !== '' && existsSync(this.config.releaseFile)) {
+      if (this.kind !== 'released') {
+        this.active?.close()
+        this.active = null
+        this.kind = 'released'
+        this.logger?.info?.('stopwatch-bridge: 让出串口给烧写工具，烧完自动重连')
+      }
+      return
+    }
+
+    const ports = await this.listPorts().catch(() => [])
     const desired = this.config.serialPort !== '' || ports.length > 0 ? 'serial' : 'tcp'
     if (desired === this.kind) return
 

@@ -73,6 +73,8 @@ node tools/flash.mjs --port /dev/cu.usbmodem1101     # Windows: --port COM5
 
 设备上电后会自动在局域网里找到这台电脑（UDP 广播发现），屏幕进入待机。
 
+烧写不需要停掉 DSH：脚本会先写 `.tools/flash.lock`，安装中的 stopwatch-bridge 看到哨兵就主动放开串口，烧完删掉文件、5 秒内自动重连。需要手动接管串口时，创建这个文件即可。
+
 ### 4. 确认审批策略是 `ask`
 
 手表只在**真的产生权限确认**时才会提醒。如果会话策略是 `never`（DSH 会直接拒绝、不弹确认），手表永远不会亮。在 Web 界面的权限设置里切回 `ask`，或使用 `/permission` 命令。

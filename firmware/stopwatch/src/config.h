@@ -77,7 +77,7 @@
 #define STOPWATCH_DEBUG 1
 #endif
 
-#define STOPWATCH_FW_VERSION "0.2.0"
+#define STOPWATCH_FW_VERSION "0.2.1"
 #define STOPWATCH_DEVICE_ID "stopwatch-01"
 #define STOPWATCH_DEVICE_NAME "M5StopWatch"
 

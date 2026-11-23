@@ -83,3 +83,18 @@ node tools/flash.mjs --compile-only     # 只编译，验证通过后 --port 烧
 - 审批流（`approval/request` → 手表同意/否决）需要一次真正触发确认的操作。
 - 音效、振动、45 秒超时回落网页。
 - 10 分钟心跳、功耗、长时间动画帧率。
+
+## 诊断日志
+
+`logFile` 配置项（例如 `/tmp/stopwatch-bridge.log`）会按 NDJSON 追加记录：
+
+| event | 含义 |
+| --- | --- |
+| `device-connected` / `device-lost` | 手表连接变化，含固件版本与电量 |
+| `approval` | 收到确认请求，含工具名、callId、会话、是否有设备 |
+| `approval-skipped` | 跳过手表的原因：`no-device` / `tool-filtered` / `delegate` |
+| `approval-shown` / `approval-outcome` | 已在手表上弹出，以及最终结果 |
+| `done` | 完成绿环推送，含是否有设备 |
+
+排查"手表没弹确认"时先看这个文件：没有 `approval` 行说明请求根本没到本插件
+（被别的应答者抢先），有 `approval-skipped` 行则说明是设备不在线或内容过于复杂。
