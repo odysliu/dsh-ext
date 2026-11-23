@@ -31,11 +31,6 @@
 #define STOPWATCH_HOST_TOKEN ""
 #endif
 
-/** How long the green completion ring stays up (ms). */
-#ifndef STOPWATCH_DONE_MS
-#define STOPWATCH_DONE_MS 6500
-#endif
-
 /** 1 = also speak NDJSON over USB CDC, so the watch works with no network at all. */
 #ifndef STOPWATCH_SERIAL_TRANSPORT
 #define STOPWATCH_SERIAL_TRANSPORT 1

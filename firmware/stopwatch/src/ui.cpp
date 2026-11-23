@@ -121,10 +121,7 @@ void UI::loop() {
       alert(now);
     }
   } else if (state_ == kNotice && now > noticeUntil_) {
-    setState(hasPrompt_ ? kAlert : kIdle);
-  } else if (state_ == kDone && now > doneUntil_) {
-    donePending_ = 0;
-    setState(hasPrompt_ ? kAlert : kIdle);
+    setState(restingState());
   }
 
   if (denyArmed_ && now - denyArmedAt_ > kDenyArmMs) {
@@ -157,7 +154,7 @@ void UI::loop() {
     if (wasSleeping) return;  // the first tap only wakes the screen
     if (state_ == kDone) {
       donePending_ = 0;
-      setState(hasPrompt_ ? kAlert : kIdle);
+      setState(restingState());
       return;
     }
     if (state_ == kAlert) {
@@ -174,15 +171,24 @@ void UI::onDone(const char* title, const char* id) {
   (void)id;
   strlcpy(doneTitle_, title != nullptr && title[0] != 0 ? title : "任务完成", sizeof(doneTitle_));
   donePending_++;
-  // never steal an approval or a recording; show it once they are finished
+  // never steal an approval or a recording; the ring comes back once they end
   if (state_ == kAlert || state_ == kPrompt || state_ == kRecord || state_ == kTranscribing) {
-    doneDeferred_ = true;
+    return;  // restingState() brings the ring back once these finish
+  }
+  if (state_ == kDone) {
+    lastActivity_ = millis();
+    renderDone();  // same screen, newest title
     return;
   }
-  doneUntil_ = millis() + STOPWATCH_DONE_MS;
+  lastActivity_ = millis();
   M5.Power.setVibration(70);
   vibrateUntil_ = millis() + 220;
   setState(kDone);
+}
+
+UI::State UI::restingState() const {
+  if (hasPrompt_) return kAlert;
+  return donePending_ > 0 ? kDone : kIdle;
 }
 
 void UI::pulseBrightness(uint32_t now) {

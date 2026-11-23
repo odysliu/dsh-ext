@@ -55,6 +55,8 @@ class UI : public LinkListener {
   void renderTranscribing();
   void renderReview();
   void renderDone();
+  /** The screen to fall back to: approval, then a waiting completion ring, then idle. */
+  State restingState() const;
   /** Dump whatever is on screen (used for remote screenshots). */
   void dumpScreen();
   void handleVoiceButtons(uint32_t now);
@@ -86,8 +88,6 @@ class UI : public LinkListener {
   uint32_t lastActivity_ = 0;
   char doneTitle_[128] = {0};
   uint8_t donePending_ = 0;
-  uint32_t doneUntil_ = 0;
-  bool doneDeferred_ = false;
   M5Canvas* doneCanvas_ = nullptr;
   bool screenOff_ = false;
   bool screenDim_ = false;
