@@ -421,6 +421,10 @@ void Link::handleLine(char *line, Channel from) {
     sendStatus();
     return;
   }
+  if (!strcmp(type, "done")) {
+    listener_->onDone(doc["title"] | "", doc["id"] | "");
+    return;
+  }
   if (!strcmp(type, "dump")) {
     listener_->onDumpRequested();
     return;

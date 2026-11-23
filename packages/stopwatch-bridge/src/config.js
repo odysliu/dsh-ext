@@ -42,6 +42,8 @@ export const DEFAULT_CONFIG = Object.freeze({
   vibration: true,
   /** Name advertised in discovery replies. */
   deviceName: 'dsh-stopwatch',
+  /** Announce finished turns on the watch with a green ring. */
+  completion: true,
   /** Accept voice recordings from the watch and transcribe them. */
   voice: true,
   /** Language hint passed to the speech service. */
@@ -100,6 +102,7 @@ export function normalizeConfig(raw) {
   cfg.allowedTools = stringList('allowedTools', cfg.allowedTools)
   cfg.sound = boolean('sound', cfg.sound)
   cfg.vibration = boolean('vibration', cfg.vibration)
+  cfg.completion = boolean('completion', cfg.completion)
   cfg.voice = boolean('voice', cfg.voice)
   cfg.language = text('language', cfg.language)
   return Object.freeze(cfg)

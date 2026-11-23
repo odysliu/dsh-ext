@@ -85,16 +85,23 @@ void Character::tick(uint32_t now) {
   }
 }
 
-void Character::dump() {
-  if (!ready_ || count_ == 0) return;
-  const uint16_t* buffer = reinterpret_cast<const uint16_t*>(frames_[index_]->getBuffer());
+void Character::dumpCanvas(M5Canvas* canvas) {
+  if (canvas == nullptr) return;
+  const int w = canvas->width();
+  const int h = canvas->height();
+  const uint16_t* buffer = reinterpret_cast<const uint16_t*>(canvas->getBuffer());
   if (buffer == nullptr) return;
-  Serial.printf("DUMP %d %d\n", CHAR_W, CHAR_H);
-  for (size_t i = 0; i < static_cast<size_t>(CHAR_W) * CHAR_H; i++) {
+  Serial.printf("DUMP %d %d\n", w, h);
+  for (size_t i = 0; i < static_cast<size_t>(w) * h; i++) {
     Serial.printf("%04X", buffer[i]);
-    if ((i + 1) % CHAR_W == 0) Serial.print('\n');
+    if ((i + 1) % w == 0) Serial.print('\n');
   }
   Serial.println("END");
+}
+
+void Character::dump() {
+  if (!ready_ || count_ == 0) return;
+  dumpCanvas(frames_[index_]);
 }
 
 void Character::push(int x, int y) {

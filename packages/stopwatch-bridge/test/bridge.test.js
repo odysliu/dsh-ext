@@ -234,3 +234,39 @@ test('tool policy keeps excluded tools on the Web UI', async (t) => {
   assert.equal(fellBack, true)
   assert.deepEqual(watch.messages.filter((message) => message.t === 'prompt'), [])
 })
+
+test('a finished turn announces the session on the watch', async () => {
+  const { bridge } = await setup()
+  const sent = []
+  bridge.server.send = (message) => sent.push(message)
+  bridge.ctx.get = (name) =>
+    name === 'sessionTitle' ? { get: () => ({ title: '修复登录接口' }) } : undefined
+
+  const session = { id: 's1', header: { cwd: '/tmp/work' } }
+  bridge.onSessionEvent(session, { type: 'turn/end', data: { reason: { kind: 'completed' } } })
+
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0].t, 'done')
+  assert.equal(sent[0].title, '修复登录接口')
+  bridge.stop()
+})
+
+test('only completed top-level turns are announced', async () => {
+  const { bridge } = await setup()
+  const sent = []
+  bridge.server.send = (message) => sent.push(message)
+
+  bridge.onSessionEvent({ id: 's1', header: {} }, { type: 'turn/end', data: { reason: { kind: 'aborted' } } })
+  bridge.onSessionEvent({ id: 's2', header: { parentSession: 'root' } }, { type: 'turn/end', data: { reason: { kind: 'completed' } } })
+  bridge.onSessionEvent({ id: 's3', header: {} }, { type: 'step/end', data: {} })
+
+  assert.equal(sent.length, 0)
+  bridge.stop()
+})
+
+test('the session label falls back to the folder name', async () => {
+  const { bridge } = await setup()
+  assert.equal(bridge.sessionLabel({ id: 's', header: { cwd: '/Users/odys/work/dsh-ext' } }), 'dsh-ext')
+  assert.equal(bridge.sessionLabel({ id: 's', header: {} }), '会话')
+  bridge.stop()
+})

@@ -28,6 +28,9 @@ constexpr uint16_t kDanger = rgb(255, 96, 120);
 constexpr int kFishX = 83;
 constexpr int kFishY = 48;
 constexpr uint16_t kRing = rgb(255, 64, 72);
+constexpr uint16_t kDoneRing = rgb(52, 211, 138);
+constexpr uint16_t kDoneRingDim = rgb(12, 46, 36);
+constexpr uint16_t kDoneText = rgb(126, 240, 190);
 
 constexpr int kButtonY = 332;
 constexpr int kButtonH = 56;
@@ -119,6 +122,9 @@ void UI::loop() {
     }
   } else if (state_ == kNotice && now > noticeUntil_) {
     setState(hasPrompt_ ? kAlert : kIdle);
+  } else if (state_ == kDone && now > doneUntil_) {
+    donePending_ = 0;
+    setState(hasPrompt_ ? kAlert : kIdle);
   }
 
   if (denyArmed_ && now - denyArmedAt_ > kDenyArmMs) {
@@ -149,6 +155,11 @@ void UI::loop() {
     const bool wasSleeping = screenOff_ || screenDim_;
     touch();
     if (wasSleeping) return;  // the first tap only wakes the screen
+    if (state_ == kDone) {
+      donePending_ = 0;
+      setState(hasPrompt_ ? kAlert : kIdle);
+      return;
+    }
     if (state_ == kAlert) {
       setState(kPrompt);
     } else if (state_ == kPrompt) {
@@ -157,7 +168,22 @@ void UI::loop() {
   }
 }
 
-void UI::onDumpRequested() { character_.dump(); }
+void UI::onDumpRequested() { dumpScreen(); }
+
+void UI::onDone(const char* title, const char* id) {
+  (void)id;
+  strlcpy(doneTitle_, title != nullptr && title[0] != 0 ? title : "任务完成", sizeof(doneTitle_));
+  donePending_++;
+  // never steal an approval or a recording; show it once they are finished
+  if (state_ == kAlert || state_ == kPrompt || state_ == kRecord || state_ == kTranscribing) {
+    doneDeferred_ = true;
+    return;
+  }
+  doneUntil_ = millis() + STOPWATCH_DONE_MS;
+  M5.Power.setVibration(70);
+  vibrateUntil_ = millis() + 220;
+  setState(kDone);
+}
 
 void UI::pulseBrightness(uint32_t now) {
   const bool alerting = state_ == kAlert;
@@ -232,6 +258,9 @@ void UI::render() {
     case kReview:
       renderReview();
       break;
+    case kDone:
+      renderDone();
+      break;
   }
 }
 
@@ -257,6 +286,40 @@ void UI::renderIdle() {
   character_.setMood(state_ == kAlert ? Character::kAlert : Character::kIdle);
   character_.push(kFishX, kFishY);
   drawStatusLine();
+}
+
+void UI::renderDone() {
+  // drawn into a canvas so it can also be dumped over USB for inspection
+  if (doneCanvas_ == nullptr) {
+    doneCanvas_ = new M5Canvas(&M5.Display);
+    doneCanvas_->createSprite(M5.Display.width(), M5.Display.height());
+  }
+  M5Canvas& g = *doneCanvas_;
+  g.fillScreen(kBg);
+  g.fillCircle(kCx, kCx, 206, kDoneRing);
+  g.fillCircle(kCx, kCx, 196, kDoneRingDim);
+
+  char lines[3][64];
+  const int count = text::wrap(doneTitle_, 260, lines, 3);
+  const int lineHeight = 34;
+  const int top = kCx - (count * lineHeight) / 2 + 4;
+  for (int i = 0; i < count; i++) {
+    text::drawCentered(g, kCx, top + i * lineHeight, lines[i], kDoneText, kDoneRingDim);
+  }
+  if (donePending_ > 1) {
+    char extra[32];
+    snprintf(extra, sizeof(extra), "还有 %u 个", static_cast<unsigned>(donePending_ - 1));
+    text::drawCentered(g, kCx, kCx + 104, extra, kDoneText, kDoneRingDim);
+  }
+  g.pushSprite(0, 0);
+}
+
+void UI::dumpScreen() {
+  if (state_ == kDone && doneCanvas_ != nullptr) {
+    character_.dumpCanvas(doneCanvas_);
+    return;
+  }
+  character_.dump();
 }
 
 void UI::drawStatusLine() {

@@ -23,6 +23,7 @@ class UI : public LinkListener {
   void onLinkConnected() override;
   void onLinkDisconnected() override;
   void onDumpRequested() override;
+  void onDone(const char* title, const char* id) override;
   void onLinkPrompt(const PromptView& prompt) override;
   void onLinkClose(const char* id, const char* outcome, const char* text) override;
   void onLinkNotice(const char* kind, const char* text, const char* line) override;
@@ -41,6 +42,7 @@ class UI : public LinkListener {
     kRecord,
     kTranscribing,
     kReview,
+    kDone,
   };
 
   void render();
@@ -52,6 +54,9 @@ class UI : public LinkListener {
   void renderRecord();
   void renderTranscribing();
   void renderReview();
+  void renderDone();
+  /** Dump whatever is on screen (used for remote screenshots). */
+  void dumpScreen();
   void handleVoiceButtons(uint32_t now);
   void startRecording(uint32_t now);
   void finishRecording();
@@ -79,6 +84,11 @@ class UI : public LinkListener {
 
   uint32_t stateSince_ = 0;
   uint32_t lastActivity_ = 0;
+  char doneTitle_[128] = {0};
+  uint8_t donePending_ = 0;
+  uint32_t doneUntil_ = 0;
+  bool doneDeferred_ = false;
+  M5Canvas* doneCanvas_ = nullptr;
   bool screenOff_ = false;
   bool screenDim_ = false;
   uint32_t lastFrame_ = 0;

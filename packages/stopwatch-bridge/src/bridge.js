@@ -49,6 +49,41 @@ export class Bridge {
 
   /** Register listeners and start both sockets. */
   /**
+   * Tell the watch when a top-level session finished its turn.
+   * @param {any} session - session that produced the event.
+   * @param {any} event - the session event.
+   */
+  onSessionEvent(session, event) {
+    if (!this.config.completion) return
+    if (event?.type !== 'turn/end') return
+    if (event.data?.reason?.kind !== 'completed') return
+    // subagent turns would flood the watch; only the sessions a human opened
+    if (session?.header?.parentSession !== undefined) return
+    this.server.send({ t: 'done', id: String(session.id), title: this.sessionLabel(session), at: Date.now() })
+  }
+
+  /**
+   * Best human-readable name for a session.
+   * @param {any} session - live session.
+   * @returns {string} the title, a folder name, or a generic label.
+   */
+  sessionLabel(session) {
+    try {
+      const titles = this.ctx?.get?.('sessionTitle')
+      const snapshot = titles?.get?.(session)
+      if (typeof snapshot?.title === 'string' && snapshot.title !== '') return snapshot.title
+    } catch {
+      /* title service is optional */
+    }
+    const cwd = session?.header?.cwd
+    if (typeof cwd === 'string' && cwd !== '') {
+      const parts = cwd.split(/[\\/]/).filter((part) => part !== '')
+      if (parts.length > 0) return parts[parts.length - 1]
+    }
+    return '会话'
+  }
+
+  /**
    * Pick the transport described by the config.
    * @param {any} config - resolved config.
    * @returns {any} connector or server exposing listen/send/close plus device events.
@@ -94,7 +129,10 @@ export class Bridge {
       this.ctx.on('tools/pre-execute', (execution, next) => this.onPreExecute(execution, next)),
     )
     this.disposers.push(
-      this.ctx.on('session/event', (session, event) => this.voice.trackSession(session, event)),
+      this.ctx.on('session/event', (session, event) => {
+        this.voice.trackSession(session, event)
+        this.onSessionEvent(session, event)
+      }),
     )
 
     if (this.config.voice) this.voice.warmup()
