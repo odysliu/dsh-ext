@@ -31,7 +31,6 @@ void setup() {
 
 void loop() {
   M5.update();
-  if (Serial.available() > 0 && Serial.read() == 'd') gUi.dumpFrame();
   gLink.loop();
   gUi.loop();
   delay(1);

@@ -22,6 +22,7 @@ class UI : public LinkListener {
 
   void onLinkConnected() override;
   void onLinkDisconnected() override;
+  void onDumpRequested() override;
   void onLinkPrompt(const PromptView& prompt) override;
   void onLinkClose(const char* id, const char* outcome, const char* text) override;
   void onLinkNotice(const char* kind, const char* text, const char* line) override;

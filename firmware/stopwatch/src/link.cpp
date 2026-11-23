@@ -147,7 +147,11 @@ void Link::loop() {
 
   if (!wifiUp_) {
     static uint32_t lastTry = 0;
-    if (millis() - lastTry > WIFI_RETRY_MS) {
+    const auto status = WiFi.status();
+    // only restart when the stack is idle; begin() during a connect logs an error
+    const bool idle = status == WL_DISCONNECTED || status == WL_CONNECT_FAILED ||
+                      status == WL_NO_SSID_AVAIL;
+    if (idle && millis() - lastTry > WIFI_RETRY_MS) {
       lastTry = millis();
       connectWifi();
     }
@@ -210,17 +214,11 @@ void Link::loop() {
 }
 
 void Link::connectWifi() {
+  // Never block: a 12 s synchronous wait starved pumpSerial() and stalled the
+  // USB protocol whenever Wi-Fi was unreachable.
   WiFi.begin(STOPWATCH_WIFI_SSID, STOPWATCH_WIFI_PASS);
-  const uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) {
-    delay(120);
-  }
-  wifiUp_ = WiFi.status() == WL_CONNECTED;
-  if (wifiUp_) rssi_ = static_cast<int8_t>(WiFi.RSSI());
 #if STOPWATCH_DEBUG
-  Serial.printf("[dsh] wifi %s", wifiUp_ ? "connected" : "failed");
-  if (wifiUp_) Serial.printf(" ip=%s rssi=%d", WiFi.localIP().toString().c_str(), rssi_);
-  Serial.println();
+  Serial.println("[dsh] wifi connecting");
 #endif
 }
 
@@ -421,6 +419,10 @@ void Link::handleLine(char *line, Channel from) {
     if (host[0] != 0) strlcpy(hostName_, host, sizeof(hostName_));
     listener_->onLinkConnected();
     sendStatus();
+    return;
+  }
+  if (!strcmp(type, "dump")) {
+    listener_->onDumpRequested();
     return;
   }
   if (!strcmp(type, "ping")) {

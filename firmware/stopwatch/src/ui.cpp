@@ -157,7 +157,7 @@ void UI::loop() {
   }
 }
 
-void UI::dumpFrame() { character_.dump(); }
+void UI::onDumpRequested() { character_.dump(); }
 
 void UI::pulseBrightness(uint32_t now) {
   const bool alerting = state_ == kAlert;
