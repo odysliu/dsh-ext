@@ -68,6 +68,13 @@ bool UI::isEventState(State state) const {
   return state == kAlert || state == kPrompt || state == kResult || state == kNotice || state == kDone;
 }
 
+void UI::vibrate(uint32_t ms, uint8_t level) {
+  if (level == 0 || ms == 0) return;
+  M5.Power.setVibration(level);
+  const uint32_t until = millis() + ms;
+  if (static_cast<int32_t>(until - vibrateUntil_) > 0) vibrateUntil_ = until;
+}
+
 void UI::touch() {
   lastActivity_ = millis();
   if (screenOff_ || screenDim_) {
@@ -202,8 +209,7 @@ void UI::onDone(const char* title, const char* id) {
     return;
   }
   lastActivity_ = millis();
-  M5.Power.setVibration(70);
-  vibrateUntil_ = millis() + 220;
+  vibrate(2500, 90);  // a few seconds, then the loop stops the motor
   setState(kDone);
 }
 
@@ -227,10 +233,7 @@ void UI::pulseBrightness(uint32_t now) {
 
 void UI::alert(uint32_t now) {
   if (prompt_.sound) playSound(SOUND_ALERT, sizeof(SOUND_ALERT));
-  if (prompt_.vibration) {
-    M5.Power.setVibration(150);
-    vibrateUntil_ = now + 180;
-  }
+  if (prompt_.vibration) vibrate(alertCount_ == 0 ? 2500 : 400, 150);
   lastAlertAt_ = now;
 }
 
@@ -480,7 +483,6 @@ void UI::onLinkPrompt(const PromptView& prompt) {
     return;
   }
   setState(kAlert);
-  M5.Power.setVibration(prompt.vibration ? 180 : 0);
   alert(millis());
   alertCount_ = 1;
 }

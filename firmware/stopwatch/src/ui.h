@@ -76,6 +76,8 @@ class UI : public LinkListener {
   void pulseBrightness(uint32_t now);
   /** Mark user activity and wake the panel if it had blanked. */
   void touch();
+  /** Buzz for a bounded time; overlapping requests extend, never stack. */
+  void vibrate(uint32_t ms, uint8_t level);
   /** Dim or blank the panel after a long idle period. */
   void updateIdleScreen(uint32_t now);
   void alert(uint32_t now);
