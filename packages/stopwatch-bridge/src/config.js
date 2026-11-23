@@ -12,8 +12,14 @@ export const DEFAULT_CONFIG = Object.freeze({
   discoveryPort: 47778,
   /** Interface to bind; `0.0.0.0` accepts the watch from the LAN. */
   host: '0.0.0.0',
-  /** `listen` waits for the watch; `dial` connects out to it (APs that block device→host TCP). */
-  transport: 'listen',
+  /**
+   * `auto` uses USB when the watch is plugged in, otherwise TCP;
+   * `listen` waits for the watch over TCP; `dial` connects out to it;
+   * `serial` only uses the USB cable.
+   */
+  transport: 'auto',
+  /** Serial device for `serial`/`auto`; empty means "find the first matching port". */
+  serialPort: '',
   /** Watch address for `dial`; the watch listens on `port`. */
   deviceHost: '',
   /** Shared secret; empty disables the check (trusted LAN). */
@@ -43,6 +49,7 @@ export const DEFAULT_CONFIG = Object.freeze({
 })
 
 const MODES = new Set(['remote', 'notify'])
+const TRANSPORTS = new Set(['auto', 'listen', 'dial', 'serial'])
 
 /**
  * Merge and validate a Loader row config.
@@ -78,9 +85,10 @@ export function normalizeConfig(raw) {
     throw new Error(`stopwatch-bridge: mode must be one of ${[...MODES].join(', ')}`)
   }
   cfg.transport = text('transport', cfg.transport)
-  if (cfg.transport !== 'listen' && cfg.transport !== 'dial') {
-    throw new Error('stopwatch-bridge: transport must be "listen" or "dial"')
+  if (!TRANSPORTS.has(cfg.transport)) {
+    throw new Error(`stopwatch-bridge: transport must be one of ${[...TRANSPORTS].join(', ')}`)
   }
+  cfg.serialPort = text('serialPort', cfg.serialPort)
   cfg.deviceHost = text('deviceHost', cfg.deviceHost)
   if (cfg.transport === 'dial' && cfg.deviceHost === '') {
     throw new Error('stopwatch-bridge: transport "dial" needs deviceHost')

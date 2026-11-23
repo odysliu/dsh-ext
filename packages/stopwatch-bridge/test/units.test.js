@@ -26,6 +26,8 @@ test('config applies defaults and rejects bad values', () => {
   assert.equal(cfg.port, DEFAULT_CONFIG.port)
   assert.equal(cfg.mode, 'remote')
   assert.equal(normalizeConfig({ timeoutMs: 5000 }).timeoutMs, 5000)
+  assert.equal(normalizeConfig(undefined).transport, 'auto')
+  assert.throws(() => normalizeConfig({ transport: 'carrier-pigeon' }), /transport/)
   assert.throws(() => normalizeConfig({ port: 0 }), /port/)
   assert.throws(() => normalizeConfig({ mode: 'auto' }), /mode/)
   assert.throws(() => normalizeConfig({ nope: 1 }), /unknown config field/)

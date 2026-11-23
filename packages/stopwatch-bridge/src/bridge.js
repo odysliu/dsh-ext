@@ -5,6 +5,7 @@
 
 import { DeviceServer } from './server.js'
 import { DeviceConnector } from './connector.js'
+import { AutoTransport, SerialConnector } from './serial.js'
 import { Discovery } from './discovery.js'
 import { ApprovalQueue } from './queue.js'
 import { PreviewCache, summarizeToolCall } from './preview.js'
@@ -27,10 +28,7 @@ export class Bridge {
       logger: this.logger,
       alert: { sound: config.sound, vibration: config.vibration },
     })
-    this.server =
-      config.transport === 'dial'
-        ? new DeviceConnector({ host: config.deviceHost, port: config.port, token: config.token, logger: this.logger })
-        : new DeviceServer({ port: config.port, host: config.host, token: config.token, logger: this.logger })
+    this.server = this.createTransport(config)
     this.discovery = new Discovery({
       port: config.discoveryPort,
       tcpPort: config.port,
@@ -50,6 +48,25 @@ export class Bridge {
   }
 
   /** Register listeners and start both sockets. */
+  /**
+   * Pick the transport described by the config.
+   * @param {any} config - resolved config.
+   * @returns {any} connector or server exposing listen/send/close plus device events.
+   */
+  createTransport(config) {
+    if (config.transport === 'serial') {
+      return new SerialConnector({ port: config.serialPort, token: config.token, logger: this.logger })
+    }
+    if (config.transport === 'dial') {
+      return new DeviceConnector({ host: config.deviceHost, port: config.port, token: config.token, logger: this.logger })
+    }
+    if (config.transport === 'auto') {
+      // the cable works on any network; the network lets the watch leave the desk
+      return new AutoTransport(config, this.logger)
+    }
+    return new DeviceServer({ port: config.port, host: config.host, token: config.token, logger: this.logger })
+  }
+
   start() {
     if (this.started) return
     this.started = true

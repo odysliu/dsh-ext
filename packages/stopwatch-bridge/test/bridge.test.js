@@ -17,6 +17,7 @@ async function setup(overrides = {}) {
     discoveryPort: 0,
     host: '127.0.0.1',
     timeoutMs: 400,
+    transport: 'listen', // tests drive a fake watch over TCP, not a real cable
     ...overrides,
   }
   const bridge = new Bridge(ctx, config)

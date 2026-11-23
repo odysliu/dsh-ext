@@ -11,7 +11,15 @@ import { FakeWatch, mockContext, waitFor } from './helpers.js'
  */
 async function setup(overrides = {}) {
   const ctx = mockContext()
-  const config = { ...normalizeConfig({}), port: 0, discoveryPort: 0, host: '127.0.0.1', timeoutMs: 400, ...overrides }
+  const config = {
+    ...normalizeConfig({}),
+    port: 0,
+    discoveryPort: 0,
+    host: '127.0.0.1',
+    timeoutMs: 400,
+    transport: 'listen', // no real cable in tests
+    ...overrides,
+  }
   const bridge = new Bridge(ctx, config)
   bridge.start()
   await waitFor(() => bridge.server.port !== 0)

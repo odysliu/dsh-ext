@@ -41,6 +41,10 @@ class LinkListener {
 
 class Link {
  public:
+  /** Which transport currently carries the protocol. */
+  enum Channel : uint8_t { kNoChannel, kSerialChannel, kTcpChannel };
+
+
   void begin(LinkListener *listener);
   void loop();
 
@@ -62,12 +66,17 @@ class Link {
 
  private:
   void connectWifi();
-  void sendHello();
+  void sendHello(Channel via);
+  void pumpSerial();
+  void maintainSerial();
+  bool channelOk();
+  size_t writeRaw(Channel via, const uint8_t *data, size_t len);
+  void writeLine(Channel via, const uint8_t *data, size_t len);
   void adoptClient();
   bool discoverHost(uint32_t timeoutMs);
   bool connectHost();
   void readSocket();
-  void handleLine(char *line);
+  void handleLine(char *line, Channel from);
   void send(const char *json);
   void sendStatus();
   void readBattery();
@@ -83,6 +92,10 @@ class Link {
   bool configured_ = false;
   bool wifiUp_ = false;
   bool connected_ = false;
+  Channel channel_ = kNoChannel;
+  char lineSerial_[512] = {0};
+  size_t serialLen_ = 0;
+  uint32_t lastSerialHello_ = 0;
   bool serverStarted_ = false;
 
   char host_[40] = {0};

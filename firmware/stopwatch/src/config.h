@@ -31,6 +31,11 @@
 #define STOPWATCH_HOST_TOKEN ""
 #endif
 
+/** 1 = also speak NDJSON over USB CDC, so the watch works with no network at all. */
+#ifndef STOPWATCH_SERIAL_TRANSPORT
+#define STOPWATCH_SERIAL_TRANSPORT 1
+#endif
+
 /** Idle screen: dim after this long, blank after this long (ms). */
 #ifndef STOPWATCH_SCREEN_DIM_MS
 #define STOPWATCH_SCREEN_DIM_MS 20000

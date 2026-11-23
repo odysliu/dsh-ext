@@ -96,6 +96,32 @@ void Link::loop() {
     }
   }
 #endif
+#if STOPWATCH_SERIAL_TRANSPORT
+  // USB first: it needs no network, so the watch also works on locked-down LANs
+  pumpSerial();
+  maintainSerial();
+  if (channel_ == kSerialChannel) {
+    if (!channelOk()) {
+      channel_ = kNoChannel;
+      connected_ = false;
+      listener_->onLinkDisconnected();
+      return;
+    }
+    if (millis() - lastBeat_ > BEAT_TIMEOUT_MS) {
+      channel_ = kNoChannel;  // the host stopped talking; re-offer the serial link
+      connected_ = false;
+      listener_->onLinkDisconnected();
+      return;
+    }
+    if (millis() - lastStatus_ > STATUS_INTERVAL_MS) {
+      lastStatus_ = millis();
+      readBattery();
+      sendStatus();
+    }
+    return;
+  }
+#endif
+
   if (!configured_) return;
 
   const bool up = WiFi.status() == WL_CONNECTED;
@@ -270,7 +296,7 @@ bool Link::connectHost() {
   client_.setNoDelay(true);
   if (!client_.connect(host_, port_, CONNECT_TIMEOUT_MS)) return false;
 
-  sendHello();
+  sendHello(channel_);
   lastBeat_ = millis();
   lastStatus_ = millis();
 #if STOPWATCH_DEBUG
@@ -279,7 +305,57 @@ bool Link::connectHost() {
   return true;
 }
 
-void Link::sendHello() {
+bool Link::channelOk() {
+  if (channel_ == kSerialChannel) return static_cast<bool>(Serial);
+  if (channel_ == kTcpChannel) return client_.connected();
+  return false;
+}
+
+size_t Link::writeRaw(Channel via, const uint8_t *data, size_t len) {
+  if (via == kSerialChannel) return Serial.write(data, len);
+  if (via == kTcpChannel) return client_.write(data, len);
+  return 0;
+}
+
+void Link::writeLine(Channel via, const uint8_t *data, size_t len) {
+  if (via == kNoChannel) return;
+  writeRaw(via, data, len);
+  const char newline = '\n';
+  writeRaw(via, reinterpret_cast<const uint8_t *>(&newline), 1);
+}
+
+void Link::pumpSerial() {
+  while (Serial.available()) {
+    const int value = Serial.read();
+    if (value < 0) break;
+    const char c = static_cast<char>(value);
+    if (c == '\r') continue;
+    if (c == '\n') {
+      lineSerial_[serialLen_] = 0;
+      if (serialLen_ > 0) handleLine(lineSerial_, kSerialChannel);
+      serialLen_ = 0;
+      continue;
+    }
+    if (serialLen_ < sizeof(lineSerial_) - 1) {
+      lineSerial_[serialLen_++] = c;
+    } else {
+      serialLen_ = 0;
+    }
+  }
+}
+
+void Link::maintainSerial() {
+  if (channel_ == kSerialChannel) return;
+  if (connected_) return;  // already paired over TCP
+  // Write even when the host looks absent: HWCDC only reports a connection once
+  // the host actually drains our TX FIFO, so writing is what proves it.
+  constexpr uint32_t kHelloMs = 2000;
+  if (millis() - lastSerialHello_ < kHelloMs) return;
+  lastSerialHello_ = millis();
+  sendHello(kSerialChannel);
+}
+
+void Link::sendHello(Channel via) {
   JsonDocument doc;
   doc["t"] = "hello";
   doc["proto"] = 1;
@@ -290,21 +366,21 @@ void Link::sendHello() {
   doc["battery"] = battery_;
   char payload[320];
   size_t length = serializeJson(doc, payload, sizeof(payload));
-  const size_t written = client_.write(reinterpret_cast<const uint8_t *>(payload), length);
-  client_.write('\n');
+  writeLine(via, reinterpret_cast<const uint8_t *>(payload), length);
 #if STOPWATCH_DEBUG
-  Serial.printf("[dsh] hello %u/%u bytes: %s\n", static_cast<unsigned>(written), static_cast<unsigned>(length), payload);
+  Serial.printf("[dsh] hello via %s: %s\n", via == kSerialChannel ? "usb" : "tcp", payload);
 #endif
 }
 
 void Link::adoptClient() {
   client_.setNoDelay(true);
+  channel_ = kTcpChannel;
   lastBeat_ = millis();
   lastConnectAttempt_ = millis();  // the welcome timeout counts from accept
 #if STOPWATCH_DEBUG
   Serial.printf("[dsh] host dialed in from %s\n", client_.remoteIP().toString().c_str());
 #endif
-  sendHello();
+  sendHello(kTcpChannel);
 }
 
 void Link::readSocket() {
@@ -314,7 +390,7 @@ void Link::readSocket() {
     const char c = static_cast<char>(value);
     if (c == '\n') {
       line_[lineLen_] = 0;
-      if (lineLen_ > 0) handleLine(line_);
+      if (lineLen_ > 0) handleLine(line_, kTcpChannel);
       lineLen_ = 0;
       continue;
     }
@@ -326,7 +402,7 @@ void Link::readSocket() {
   }
 }
 
-void Link::handleLine(char *line) {
+void Link::handleLine(char *line, Channel from) {
 #if STOPWATCH_DEBUG
   Serial.printf("[dsh] <- %s\n", line);
 #endif
@@ -336,6 +412,7 @@ void Link::handleLine(char *line) {
 
   const char *type = doc["t"] | "";
   if (!strcmp(type, "welcome")) {
+    channel_ = from;
     connected_ = true;
 #if STOPWATCH_DEBUG
     Serial.println("[dsh] paired, waiting for prompts");
@@ -352,8 +429,7 @@ void Link::handleLine(char *line) {
     reply["ts"] = doc["ts"] | 0;
     char payload[96];
     size_t length = serializeJson(reply, payload, sizeof(payload));
-    client_.write(reinterpret_cast<const uint8_t *>(payload), length);
-    client_.write('\n');
+    writeLine(from, reinterpret_cast<const uint8_t *>(payload), length);
     return;
   }
   if (!strcmp(type, "prompt")) {
@@ -418,9 +494,8 @@ void Link::handleLine(char *line) {
 }
 
 void Link::send(const char *json) {
-  if (!connected_ || !client_.connected()) return;
-  client_.write(reinterpret_cast<const uint8_t *>(json), strlen(json));
-  client_.write('\n');
+  if (!connected_ || !channelOk()) return;
+  writeLine(channel_, reinterpret_cast<const uint8_t *>(json), strlen(json));
 }
 
 void Link::sendDecision(const char *id, const char *value, uint32_t latencyMs) {
@@ -431,9 +506,8 @@ void Link::sendDecision(const char *id, const char *value, uint32_t latencyMs) {
   doc["latencyMs"] = latencyMs;
   char payload[192];
   size_t length = serializeJson(doc, payload, sizeof(payload));
-  if (!connected_ || !client_.connected()) return;
-  client_.write(reinterpret_cast<const uint8_t *>(payload), length);
-  client_.write('\n');
+  if (!connected_ || !channelOk()) return;
+  writeLine(channel_, reinterpret_cast<const uint8_t *>(payload), length);
 }
 
 namespace {
