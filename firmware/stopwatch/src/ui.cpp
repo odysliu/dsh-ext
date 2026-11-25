@@ -488,6 +488,9 @@ void UI::onLinkDisconnected() {
 }
 
 void UI::onLinkPrompt(const PromptView& prompt) {
+#if STOPWATCH_DEBUG
+  Serial.printf("[dsh] UI got prompt, state=%d\n", static_cast<int>(state_));
+#endif
   if (state_ == kPrompt) return;  // one prompt on screen at a time; the host queues the rest
   prompt_ = prompt;
   hasPrompt_ = true;

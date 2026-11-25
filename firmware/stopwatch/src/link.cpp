@@ -19,8 +19,12 @@ const char *kNamespace = "dsh-stopwatch";
 
 void Link::begin(LinkListener *listener) {
   listener_ = listener;
-#if STOPWATCH_DEBUG
+  // The USB CDC RX queue defaults to 256 bytes; a prompt frame is several
+  // hundred, so larger frames arrived truncated and failed to parse. The size
+  // must be set before begin().
+  Serial.setRxBufferSize(4096);
   Serial.begin(921600);
+#if STOPWATCH_DEBUG
   Serial.printf("\n[dsh] boot fw=%s id=%s\n", STOPWATCH_FW_VERSION, STOPWATCH_DEVICE_ID);
 #endif
   bootMs_ = millis();
@@ -338,6 +342,9 @@ void Link::pumpSerial() {
     if (serialLen_ < sizeof(lineSerial_) - 1) {
       lineSerial_[serialLen_++] = c;
     } else {
+#if STOPWATCH_DEBUG
+      Serial.printf("[dsh] dropped oversize serial frame (%u bytes)\n", static_cast<unsigned>(serialLen_));
+#endif
       serialLen_ = 0;
     }
   }
@@ -406,7 +413,14 @@ void Link::handleLine(char *line, Channel from) {
   Serial.printf("[dsh] <- %s\n", line);
 #endif
   JsonDocument doc;
-  if (deserializeJson(doc, line)) return;
+  const DeserializationError parseError = deserializeJson(doc, line);
+  if (parseError) {
+#if STOPWATCH_DEBUG
+    Serial.printf("[dsh] frame parse failed: %s (%u bytes)\n", parseError.c_str(),
+                  static_cast<unsigned>(strlen(line)));
+#endif
+    return;
+  }
   lastBeat_ = millis();
 
   const char *type = doc["t"] | "";
@@ -456,6 +470,9 @@ void Link::handleLine(char *line, Channel from) {
     prompt.sound = doc["sound"] | true;
     prompt.vibration = doc["vibration"] | true;
     pending_ = prompt.total > 0 ? prompt.total - 1 : 0;
+#if STOPWATCH_DEBUG
+    Serial.printf("[dsh] prompt id=%s lines=%u\n", prompt.id, static_cast<unsigned>(prompt.lineCount));
+#endif
     listener_->onLinkPrompt(prompt);
     return;
   }

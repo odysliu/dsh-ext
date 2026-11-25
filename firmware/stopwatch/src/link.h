@@ -97,7 +97,9 @@ class Link {
   bool wifiUp_ = false;
   bool connected_ = false;
   Channel channel_ = kNoChannel;
-  char lineSerial_[512] = {0};
+  // A prompt frame carries up to 8 lines of Chinese text plus the command that
+  // triggered it; 512 bytes silently dropped real approvals.
+  char lineSerial_[4096] = {0};
   size_t serialLen_ = 0;
   uint32_t lastSerialHello_ = 0;
   bool serverStarted_ = false;
